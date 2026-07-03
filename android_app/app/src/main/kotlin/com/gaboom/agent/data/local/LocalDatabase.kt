@@ -2,6 +2,9 @@ package com.gaboom.agent.data.local
 
 import androidx.room.*
 import kotlinx.coroutines.flow.Flow
+import com.gaboom.agent.data.clock.ClockHistoryEntity
+import com.gaboom.agent.device.DeviceIdentityEntity
+import com.gaboom.agent.device.DeviceIdentityDao
 
 /**
  * Room Database pour cache local éphémère
@@ -51,6 +54,7 @@ data class OfflineSession(
     @ColumnInfo(name = "clock_confidence") val clockConfidence: String,
     @ColumnInfo(name = "timestamp") val timestamp: Long = System.currentTimeMillis(),
     @ColumnInfo(name = "version") val version: Int = 1,
+    @ColumnInfo(name = "locked") val locked: Boolean = false,
     @ColumnInfo(name = "hash") val hash: String = ""
 )
 
@@ -265,9 +269,14 @@ interface PendingTicketDao {
         TransactionLocal::class,
         ConfigLocal::class,
         ClockSnapshot::class,
-        SecurityMetadata::class
+        SecurityMetadata::class,
+        SyncLedgerEntity::class,
+        SyncQueueEntity::class,
+        IntegrityEventEntity::class,
+        DeviceIdentityEntity::class,
+        ClockHistoryEntity::class
     ],
-    version = 4,  // Bumped for Phase 2 entities
+    version = 5,  // Bumped for Phase 2 entities
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -275,6 +284,14 @@ abstract class AgentDatabase : RoomDatabase() {
     abstract fun localTicketCacheDao(): LocalTicketCacheDao
     abstract fun tirageSessionCacheDao(): TirageSessionCacheDao
     abstract fun pendingTicketDao(): PendingTicketDao
+    abstract fun configLocalDao(): ConfigLocalDao
+    abstract fun syncLedgerDao(): SyncLedgerDao
+    abstract fun syncQueueDao(): SyncQueueDao
+    abstract fun clockSnapshotDao(): ClockSnapshotDao
+    abstract fun clockHistoryDao(): ClockHistoryDao
+    abstract fun offlineSessionDao(): OfflineSessionDao
+    abstract fun integrityEventDao(): IntegrityEventDao
+    abstract fun deviceIdentityDao(): DeviceIdentityDao
 }
 
 /**

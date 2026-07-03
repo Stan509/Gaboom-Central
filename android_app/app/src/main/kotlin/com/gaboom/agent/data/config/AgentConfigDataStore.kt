@@ -32,6 +32,24 @@ class AgentConfigDataStore @Inject constructor(
         val DEVICE_ID = stringPreferencesKey("device_id")
         val DEVICE_SECRET = stringPreferencesKey("device_secret")
         val DEVICE_NAME = stringPreferencesKey("device_name")
+        val CACHED_TIRAGES = stringPreferencesKey("cached_tirages")
+    }
+
+    suspend fun saveCachedTirages(tirages: List<com.gaboom.agent.data.model.Tirage>) {
+        val json = com.google.gson.Gson().toJson(tirages)
+        dataStore.edit { prefs ->
+            prefs[CACHED_TIRAGES] = json
+        }
+    }
+
+    suspend fun getCachedTirages(): List<com.gaboom.agent.data.model.Tirage> {
+        val json = dataStore.data.map { prefs -> prefs[CACHED_TIRAGES] }.first() ?: return emptyList()
+        return try {
+            val type = object : com.google.gson.reflect.TypeToken<List<com.gaboom.agent.data.model.Tirage>>() {}.type
+            com.google.gson.Gson().fromJson(json, type)
+        } catch (e: Exception) {
+            emptyList()
+        }
     }
 
     // ─── Free Marriage Option ─────────────────────────────────────────────────

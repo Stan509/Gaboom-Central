@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gaboom.agent.data.api.AgentApiService
 import com.gaboom.agent.data.model.Tirage
+import com.gaboom.agent.data.config.AgentConfigDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,8 @@ data class TirageSelectionUiState(
 
 @HiltViewModel
 class TirageSelectionViewModel @Inject constructor(
-    private val apiService: AgentApiService
+    private val apiService: AgentApiService,
+    private val agentConfigDataStore: AgentConfigDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TirageSelectionUiState())
@@ -31,21 +33,27 @@ class TirageSelectionViewModel @Inject constructor(
             try {
                 val response = apiService.getTiragesActifs()
                 if (response.isSuccessful) {
-                    val tirages = response.body()?.tirages?.filter { it.etat == "OUVERT" } ?: emptyList()
+                    val allTirages = response.body()?.tirages ?: emptyList()
+                    agentConfigDataStore.saveCachedTirages(allTirages)
+                    val tirages = allTirages.filter { it.etat == "OUVERT" }
                     _uiState.value = _uiState.value.copy(
                         tirages = tirages,
                         isLoading = false
                     )
                 } else {
+                    val cached = agentConfigDataStore.getCachedTirages()
                     _uiState.value = _uiState.value.copy(
+                        tirages = cached.filter { it.etat == "OUVERT" },
                         isLoading = false,
-                        error = "Erreur chargement tirages"
+                        error = if (cached.isEmpty()) "Erreur chargement tirages" else null
                     )
                 }
             } catch (e: Exception) {
+                val cached = agentConfigDataStore.getCachedTirages()
                 _uiState.value = _uiState.value.copy(
+                    tirages = cached.filter { it.etat == "OUVERT" },
                     isLoading = false,
-                    error = "Erreur: ${e.message}"
+                    error = if (cached.isEmpty()) "Erreur: ${e.message}" else null
                 )
             }
         }

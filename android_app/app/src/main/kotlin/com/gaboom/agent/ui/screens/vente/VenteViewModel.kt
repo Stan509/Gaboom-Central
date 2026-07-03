@@ -145,22 +145,25 @@ class VenteViewModel @Inject constructor(
             val response = apiService.getTiragesActifs()
             if (response.isSuccessful) {
                 val allTirages = response.body()?.tirages ?: emptyList()
-                // Separate open and closed tirages
-                val openTirages = allTirages.filter { it.etat == "OUVERT" }
+                agentConfigDataStore.saveCachedTirages(allTirages)
                 _uiState.value = _uiState.value.copy(
                     availableTirages = allTirages,  // Include all for display (closed ones grayed out)
                     isLoadingTirages = false
                 )
             } else {
+                val cached = agentConfigDataStore.getCachedTirages()
                 _uiState.value = _uiState.value.copy(
+                    availableTirages = cached,
                     isLoadingTirages = false,
-                    error = "Erreur chargement tirages"
+                    error = if (cached.isEmpty()) "Erreur chargement tirages" else null
                 )
             }
         } catch (e: Exception) {
+            val cached = agentConfigDataStore.getCachedTirages()
             _uiState.value = _uiState.value.copy(
+                availableTirages = cached,
                 isLoadingTirages = false,
-                error = "Erreur: ${e.message}"
+                error = if (cached.isEmpty()) "Erreur: ${e.message}" else null
             )
         }
     }
@@ -1138,25 +1141,36 @@ class VenteViewModel @Inject constructor(
         try {
             val response = apiService.getTiragesActifs()
             if (response.isSuccessful) {
-                val tirages = response.body()?.tirages?.filter { it.etat == "OUVERT" } ?: emptyList()
-                // Pre-select the default tirage
+                val allTirages = response.body()?.tirages ?: emptyList()
+                agentConfigDataStore.saveCachedTirages(allTirages)
+                val openTirages = allTirages.filter { it.etat == "OUVERT" }
                 val defaultSelected = setOf(defaultTirageId)
                 _uiState.value = _uiState.value.copy(
-                    availableTirages = tirages,
+                    availableTirages = openTirages,
                     selectedTirageIds = defaultSelected,
                     isLoadingTirages = false,
                     multiTirageMode = false // Start in single mode, user can enable multi
                 )
             } else {
+                val cached = agentConfigDataStore.getCachedTirages()
+                val defaultSelected = setOf(defaultTirageId)
                 _uiState.value = _uiState.value.copy(
+                    availableTirages = cached,
+                    selectedTirageIds = defaultSelected,
                     isLoadingTirages = false,
-                    error = "Erreur chargement tirages"
+                    multiTirageMode = false,
+                    error = if (cached.isEmpty()) "Erreur chargement tirages" else null
                 )
             }
         } catch (e: Exception) {
+            val cached = agentConfigDataStore.getCachedTirages()
+            val defaultSelected = setOf(defaultTirageId)
             _uiState.value = _uiState.value.copy(
+                availableTirages = cached,
+                selectedTirageIds = defaultSelected,
                 isLoadingTirages = false,
-                error = "Erreur: ${e.message}"
+                multiTirageMode = false,
+                error = if (cached.isEmpty()) "Erreur: ${e.message}" else null
             )
         }
     }
@@ -1177,21 +1191,27 @@ class VenteViewModel @Inject constructor(
             try {
                 val response = apiService.getTiragesActifs()
                 if (response.isSuccessful) {
-                    val tirages = response.body()?.tirages?.filter { it.etat == "OUVERT" } ?: emptyList()
+                    val allTirages = response.body()?.tirages ?: emptyList()
+                    agentConfigDataStore.saveCachedTirages(allTirages)
+                    val openTirages = allTirages.filter { it.etat == "OUVERT" }
                     _uiState.value = _uiState.value.copy(
-                        availableTirages = tirages,
+                        availableTirages = openTirages,
                         isLoadingTirages = false
                     )
                 } else {
+                    val cached = agentConfigDataStore.getCachedTirages()
                     _uiState.value = _uiState.value.copy(
+                        availableTirages = cached.filter { it.etat == "OUVERT" },
                         isLoadingTirages = false,
-                        error = "Erreur chargement tirages"
+                        error = if (cached.isEmpty()) "Erreur chargement tirages" else null
                     )
                 }
             } catch (e: Exception) {
+                val cached = agentConfigDataStore.getCachedTirages()
                 _uiState.value = _uiState.value.copy(
+                    availableTirages = cached.filter { it.etat == "OUVERT" },
                     isLoadingTirages = false,
-                    error = "Erreur: ${e.message}"
+                    error = if (cached.isEmpty()) "Erreur: ${e.message}" else null
                 )
             }
         }

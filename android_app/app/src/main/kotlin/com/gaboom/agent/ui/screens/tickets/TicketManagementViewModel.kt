@@ -59,7 +59,9 @@ data class TicketManagementUiState(
 @HiltViewModel
 class TicketManagementViewModel @Inject constructor(
     private val apiService: AgentApiService,
-    private val bluetoothPrinter: BluetoothPrinter
+    private val bluetoothPrinter: BluetoothPrinter,
+    private val pendingTicketDao: com.gaboom.agent.data.local.PendingTicketDao,
+    private val agentConfigDataStore: com.gaboom.agent.data.config.AgentConfigDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TicketManagementUiState())
@@ -67,7 +69,7 @@ class TicketManagementViewModel @Inject constructor(
 
     init {
         loadTirages()
-        loadTickets()
+        loadTickets(refresh = true)
     }
 
     private fun loadTirages() {
@@ -75,12 +77,17 @@ class TicketManagementViewModel @Inject constructor(
             try {
                 val response = apiService.getTiragesActifs()
                 if (response.isSuccessful && response.body()?.success == true) {
+                    val tirages = response.body()?.tirages ?: emptyList()
                     _uiState.value = _uiState.value.copy(
-                        availableTirages = response.body()?.tirages ?: emptyList()
+                        availableTirages = tirages
                     )
+                } else {
+                    val cached = agentConfigDataStore.getCachedTirages()
+                    _uiState.value = _uiState.value.copy(availableTirages = cached)
                 }
             } catch (e: Exception) {
-                // Ignore - tirages filter is optional
+                val cached = agentConfigDataStore.getCachedTirages()
+                _uiState.value = _uiState.value.copy(availableTirages = cached)
             }
         }
     }
@@ -96,6 +103,10 @@ class TicketManagementViewModel @Inject constructor(
                 currentPage = if (refresh) 0 else currentState.currentPage
             )
 
+            // Local pending tickets mapping
+            val pendingEntities = pendingTicketDao.getAll()
+            val pendingListItems = pendingEntities.map { mapPendingToListItem(it) }
+
             try {
                 val dateStr = currentState.selectedDate?.format(DateTimeFormatter.ISO_LOCAL_DATE)
                 val response = apiService.listTickets(
@@ -109,26 +120,118 @@ class TicketManagementViewModel @Inject constructor(
                 if (response.isSuccessful && response.body()?.success == true) {
                     val body = response.body()!!
                     val newTickets = body.tickets ?: emptyList()
-                    
+
+                    if (refresh) {
+                        agentConfigDataStore.saveCachedTicketList(newTickets)
+                    } else {
+                        val deduplicated = (agentConfigDataStore.getCachedTicketList() + newTickets).distinctBy { it.id }
+                        agentConfigDataStore.saveCachedTicketList(deduplicated)
+                    }
+
+                    val rawList = if (refresh) newTickets else currentState.tickets + newTickets
+                    val mergedList = pendingListItems + rawList.filter { raw -> pendingListItems.none { p -> p.id == raw.id } }
+
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        tickets = if (refresh) newTickets else currentState.tickets + newTickets,
-                        totalTickets = body.total ?: newTickets.size,
+                        tickets = mergedList,
+                        totalTickets = body.total ?: mergedList.size,
                         hasMore = newTickets.size >= currentState.pageSize
                     )
                 } else {
+                    // Fail fallback to cache + local pending
+                    val cachedTickets = agentConfigDataStore.getCachedTicketList()
+                    val filteredCached = filterList(cachedTickets, currentState)
+                    val mergedList = pendingListItems + filteredCached.filter { raw -> pendingListItems.none { p -> p.id == raw.id } }
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = response.body()?.error ?: "Erreur lors du chargement"
+                        tickets = mergedList,
+                        totalTickets = mergedList.size,
+                        hasMore = false,
+                        error = if (cachedTickets.isEmpty()) (response.body()?.error ?: "Erreur serveur") else null
                     )
                 }
             } catch (e: Exception) {
+                // Network error fallback to cache + local pending
+                val cachedTickets = agentConfigDataStore.getCachedTicketList()
+                val filteredCached = filterList(cachedTickets, currentState)
+                val mergedList = pendingListItems + filteredCached.filter { raw -> pendingListItems.none { p -> p.id == raw.id } }
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = "Erreur réseau: ${e.message}"
+                    tickets = mergedList,
+                    totalTickets = mergedList.size,
+                    hasMore = false,
+                    error = if (cachedTickets.isEmpty()) "Erreur réseau: ${e.message}" else null
                 )
             }
         }
+    }
+
+    private fun mapPendingToListItem(entity: com.gaboom.agent.data.local.PendingTicketEntity): TicketListItem {
+        val count = entity.linesSummary.split(", ").filter { it.isNotBlank() }.size
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXX")
+        val createdStr = try {
+            java.time.OffsetDateTime.ofInstant(
+                java.time.Instant.ofEpochMilli(entity.createdAt),
+                java.time.ZoneId.systemDefault()
+            ).format(formatter)
+        } catch (e: Exception) {
+            java.time.Instant.ofEpochMilli(entity.createdAt).toString()
+        }
+
+        val tirageNom = _uiState.value.availableTirages.find { it.id == entity.tirageId }?.nom ?: "Tirage"
+
+        return TicketListItem(
+            id = entity.id,
+            numero = "HL-${entity.id.take(8).uppercase()}",
+            groupId = entity.batchId,
+            tirageId = entity.tirageId,
+            tirageNom = tirageNom,
+            tirageOpen = true,
+            status = when (entity.syncStatus) {
+                com.gaboom.agent.data.local.SyncStatus.PENDING -> "pending"
+                com.gaboom.agent.data.local.SyncStatus.SYNCING -> "pending"
+                com.gaboom.agent.data.local.SyncStatus.FAILED -> "pending"
+                com.gaboom.agent.data.local.SyncStatus.SYNCED -> "paid"
+                com.gaboom.agent.data.local.SyncStatus.VALIDATION_PENDING -> "pending"
+            },
+            numBets = count,
+            totalMise = entity.totalMise,
+            totalGainDu = 0.0,
+            totalGainPaye = 0.0,
+            isWinner = false,
+            isPaid = false,
+            canPay = false,
+            canVoid = entity.syncStatus == com.gaboom.agent.data.local.SyncStatus.PENDING,
+            canReprint = true,
+            createdAt = createdStr,
+            ageMinutes = (System.currentTimeMillis() - entity.createdAt) / 60000.0
+        )
+    }
+
+    private fun filterList(list: List<TicketListItem>, state: TicketManagementUiState): List<TicketListItem> {
+        var filtered = list
+        // Date filter
+        if (state.selectedDate != null) {
+            val dateStr = state.selectedDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
+            filtered = filtered.filter { it.createdAt.startsWith(dateStr) }
+        }
+        // Tirage filter
+        if (state.selectedTirageId != null) {
+            filtered = filtered.filter { it.tirageId == state.selectedTirageId }
+        }
+        // Status filter
+        if (state.statusFilter != TicketStatusFilter.ALL) {
+            filtered = filtered.filter { it.status == state.statusFilter.value }
+        }
+        // Search query
+        val query = state.searchQuery.trim().lowercase()
+        if (query.isNotEmpty()) {
+            filtered = filtered.filter {
+                it.numero.lowercase().contains(query) ||
+                it.id.lowercase().contains(query)
+            }
+        }
+        return filtered
     }
 
     fun loadMore() {

@@ -33,6 +33,9 @@ class AgentConfigDataStore @Inject constructor(
         val DEVICE_SECRET = stringPreferencesKey("device_secret")
         val DEVICE_NAME = stringPreferencesKey("device_name")
         val CACHED_TIRAGES = stringPreferencesKey("cached_tirages")
+        val CACHED_RESULTATS = stringPreferencesKey("cached_resultats")
+        val CACHED_DASHBOARD = stringPreferencesKey("cached_dashboard")
+        val CACHED_TICKET_LIST = stringPreferencesKey("cached_ticket_list")
     }
 
     suspend fun saveCachedTirages(tirages: List<com.gaboom.agent.data.model.Tirage>) {
@@ -46,6 +49,56 @@ class AgentConfigDataStore @Inject constructor(
         val json = dataStore.data.map { prefs -> prefs[CACHED_TIRAGES] }.first() ?: return emptyList()
         return try {
             val type = object : com.google.gson.reflect.TypeToken<List<com.gaboom.agent.data.model.Tirage>>() {}.type
+            com.google.gson.Gson().fromJson(json, type)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun saveCachedResultats(resultats: List<com.gaboom.agent.data.model.ResultatTirage>) {
+        val json = com.google.gson.Gson().toJson(resultats)
+        dataStore.edit { prefs ->
+            prefs[CACHED_RESULTATS] = json
+        }
+    }
+
+    suspend fun getCachedResultats(): List<com.gaboom.agent.data.model.ResultatTirage> {
+        val json = dataStore.data.map { prefs -> prefs[CACHED_RESULTATS] }.first() ?: return emptyList()
+        return try {
+            val type = object : com.google.gson.reflect.TypeToken<List<com.gaboom.agent.data.model.ResultatTirage>>() {}.type
+            com.google.gson.Gson().fromJson(json, type)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun saveCachedDashboard(dashboard: com.gaboom.agent.data.model.DashboardResponse) {
+        val json = com.google.gson.Gson().toJson(dashboard)
+        dataStore.edit { prefs ->
+            prefs[CACHED_DASHBOARD] = json
+        }
+    }
+
+    suspend fun getCachedDashboard(): com.gaboom.agent.data.model.DashboardResponse? {
+        val json = dataStore.data.map { prefs -> prefs[CACHED_DASHBOARD] }.first() ?: return null
+        return try {
+            com.google.gson.Gson().fromJson(json, com.gaboom.agent.data.model.DashboardResponse::class.java)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun saveCachedTicketList(tickets: List<com.gaboom.agent.data.model.TicketListItem>) {
+        val json = com.google.gson.Gson().toJson(tickets)
+        dataStore.edit { prefs ->
+            prefs[CACHED_TICKET_LIST] = json
+        }
+    }
+
+    suspend fun getCachedTicketList(): List<com.gaboom.agent.data.model.TicketListItem> {
+        val json = dataStore.data.map { prefs -> prefs[CACHED_TICKET_LIST] }.first() ?: return emptyList()
+        return try {
+            val type = object : com.google.gson.reflect.TypeToken<List<com.gaboom.agent.data.model.TicketListItem>>() {}.type
             com.google.gson.Gson().fromJson(json, type)
         } catch (e: Exception) {
             emptyList()

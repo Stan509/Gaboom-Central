@@ -3,6 +3,7 @@ package com.gaboom.agent.ui.screens.stats
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gaboom.agent.data.api.AgentApiService
+import com.gaboom.agent.data.config.AgentConfigDataStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -45,7 +46,8 @@ data class StatsUiState(
 
 @HiltViewModel
 class StatsViewModel @Inject constructor(
-    private val apiService: AgentApiService
+    private val apiService: AgentApiService,
+    private val agentConfigDataStore: AgentConfigDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StatsUiState())
@@ -58,40 +60,55 @@ class StatsViewModel @Inject constructor(
                 val response = apiService.getDashboard(period)
                 if (response.isSuccessful && response.body()?.success == true) {
                     val body = response.body()!!
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        agentNom = body.agent?.nom ?: "",
-                        agentZone = body.agent?.zone ?: "",
-                        commissionPct = body.agent?.commissionPct ?: 0.0,
-                        // Aujourd'hui
-                        todayTickets = body.today?.tickets ?: 0,
-                        todayMises = body.today?.mises ?: 0.0,
-                        todayGainsDu = body.today?.gainsDu ?: 0.0,
-                        todayGainsPaye = body.today?.gainsPaye ?: 0.0,
-                        todayGainAgent = body.today?.gainAgent ?: 0.0,
-                        todayCommission = body.today?.commission ?: 0.0,
-                        // Période sélectionnée
-                        periodDays = body.period?.days ?: 7,
-                        periodTickets = body.period?.tickets ?: 0,
-                        periodMises = body.period?.mises ?: 0.0,
-                        periodGainsDu = body.period?.gainsDu ?: 0.0,
-                        periodGainsPaye = body.period?.gainsPaye ?: 0.0,
-                        periodGainAgent = body.period?.gainAgent ?: 0.0,
-                        periodCommission = body.period?.commission ?: 0.0,
-                        // Global
-                        globalGainsTotaux = body.global?.gainsTotaux ?: 0.0,
-                        soldeCaisse = body.global?.soldeCaisse ?: 0.0,
-                        commissionBalance = body.global?.commissionBalance ?: 0.0,
-                        commissionEarned = body.global?.commissionEarned ?: 0.0,
-                        commissionWithdrawn = body.global?.commissionWithdrawn ?: 0.0
-                    )
+                    agentConfigDataStore.saveCachedDashboard(body)
+                    applyDashboardData(body)
                 } else {
-                    _uiState.value = _uiState.value.copy(isLoading = false, error = "Erreur de chargement")
+                    val cached = agentConfigDataStore.getCachedDashboard()
+                    if (cached != null) {
+                        applyDashboardData(cached)
+                    } else {
+                        _uiState.value = _uiState.value.copy(isLoading = false, error = "Erreur de chargement")
+                    }
                 }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isLoading = false, error = e.message)
+                val cached = agentConfigDataStore.getCachedDashboard()
+                if (cached != null) {
+                    applyDashboardData(cached)
+                } else {
+                    _uiState.value = _uiState.value.copy(isLoading = false, error = e.message)
+                }
             }
         }
+    }
+
+    private fun applyDashboardData(body: com.gaboom.agent.data.model.DashboardResponse) {
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            agentNom = body.agent?.nom ?: "",
+            agentZone = body.agent?.zone ?: "",
+            commissionPct = body.agent?.commissionPct ?: 0.0,
+            // Aujourd'hui
+            todayTickets = body.today?.tickets ?: 0,
+            todayMises = body.today?.mises ?: 0.0,
+            todayGainsDu = body.today?.gainsDu ?: 0.0,
+            todayGainsPaye = body.today?.gainsPaye ?: 0.0,
+            todayGainAgent = body.today?.gainAgent ?: 0.0,
+            todayCommission = body.today?.commission ?: 0.0,
+            // Période sélectionnée
+            periodDays = body.period?.days ?: 7,
+            periodTickets = body.period?.tickets ?: 0,
+            periodMises = body.period?.mises ?: 0.0,
+            periodGainsDu = body.period?.gainsDu ?: 0.0,
+            periodGainsPaye = body.period?.gainsPaye ?: 0.0,
+            periodGainAgent = body.period?.gainAgent ?: 0.0,
+            periodCommission = body.period?.commission ?: 0.0,
+            // Global
+            globalGainsTotaux = body.global?.gainsTotaux ?: 0.0,
+            soldeCaisse = body.global?.soldeCaisse ?: 0.0,
+            commissionBalance = body.global?.commissionBalance ?: 0.0,
+            commissionEarned = body.global?.commissionEarned ?: 0.0,
+            commissionWithdrawn = body.global?.commissionWithdrawn ?: 0.0
+        )
     }
 
     fun selectPeriod(days: Int) {

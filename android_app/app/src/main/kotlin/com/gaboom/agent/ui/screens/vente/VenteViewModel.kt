@@ -974,12 +974,13 @@ class VenteViewModel @Inject constructor(
             
             val dummyTicketInfo = saveTicketOffline(tirage, apiLines)
             
-            val now = java.time.LocalDateTime.now()
+            val secureInstant = java.time.Instant.ofEpochMilli(com.gaboom.agent.data.clock.SecuredClock.now())
+            val secureDateTime = java.time.LocalDateTime.ofInstant(secureInstant, java.time.ZoneId.systemDefault())
             val shareInfo = TicketShareInfo(
                 ticketNo = dummyTicketInfo.ticketNo,
                 tirageNom = dummyTicketInfo.tirageNom,
-                date = now.toLocalDate().toString(),
-                time = now.toLocalTime().toString().take(5),
+                date = secureDateTime.toLocalDate().toString(),
+                time = secureDateTime.toLocalTime().toString().take(5),
                 lines = apiLines.map { "${it.jeu}:${it.valeur}:${it.option}" to it.mise },
                 totalMise = dummyTicketInfo.totalMise,
                 groupId = null,
@@ -1036,14 +1037,15 @@ class VenteViewModel @Inject constructor(
                 createdOffline.add(offlineInfo)
             }
             
-            val now = java.time.LocalDateTime.now()
+            val secureInstant = java.time.Instant.ofEpochMilli(com.gaboom.agent.data.clock.SecuredClock.now())
+            val secureDateTime = java.time.LocalDateTime.ofInstant(secureInstant, java.time.ZoneId.systemDefault())
             val firstTicket = createdOffline.first()
             val tirageNames = createdOffline.joinToString(", ") { tirage -> tirage.tirageNom }
             val shareInfo = TicketShareInfo(
                 ticketNo = if (createdOffline.size > 1) "${createdOffline.size} tickets" else firstTicket.ticketNo,
                 tirageNom = tirageNames,
-                date = now.toLocalDate().toString(),
-                time = now.toLocalTime().toString().take(5),
+                date = secureDateTime.toLocalDate().toString(),
+                time = secureDateTime.toLocalTime().toString().take(5),
                 lines = entries.map { "${it.game}:${it.number}:${it.option ?: 1}" to it.stake },
                 totalMise = createdOffline.sumOf { it.totalMise },
                 groupId = firstTicket.ticketId,
@@ -1150,7 +1152,7 @@ class VenteViewModel @Inject constructor(
             }
             String.format("%-8s %-9s %6.0f", jeuDisplay, line.valeur, line.mise)
         }
-        val now = java.util.Date()
+        val now = java.util.Date(com.gaboom.agent.data.clock.SecuredClock.now())
         val dateFormat = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
         val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
 

@@ -11,6 +11,8 @@ class GaboomAgentApp : Application() {
     override fun onCreate() {
         super.onCreate()
         
+        com.gaboom.agent.data.clock.SecuredClock.init(this)
+        
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {

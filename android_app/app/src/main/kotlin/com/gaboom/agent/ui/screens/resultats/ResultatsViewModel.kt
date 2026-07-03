@@ -3,6 +3,7 @@ package com.gaboom.agent.ui.screens.resultats
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gaboom.agent.data.api.AgentApiService
+import com.gaboom.agent.data.config.AgentConfigDataStore
 import com.gaboom.agent.data.model.ResultatTirage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +20,8 @@ data class ResultatsUiState(
 
 @HiltViewModel
 class ResultatsViewModel @Inject constructor(
-    private val apiService: AgentApiService
+    private val apiService: AgentApiService,
+    private val agentConfigDataStore: AgentConfigDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ResultatsUiState())
@@ -27,19 +29,31 @@ class ResultatsViewModel @Inject constructor(
 
     fun loadResultats() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 val response = apiService.getResultats()
                 if (response.isSuccessful && response.body()?.success == true) {
+                    val list = response.body()?.resultats ?: emptyList()
+                    agentConfigDataStore.saveCachedResultats(list)
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        resultats = response.body()?.resultats ?: emptyList()
+                        resultats = list
                     )
                 } else {
-                    _uiState.value = _uiState.value.copy(isLoading = false)
+                    val cached = agentConfigDataStore.getCachedResultats()
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        resultats = cached,
+                        error = if (cached.isEmpty()) "Erreur serveur" else null
+                    )
                 }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isLoading = false, error = e.message)
+                val cached = agentConfigDataStore.getCachedResultats()
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    resultats = cached,
+                    error = if (cached.isEmpty()) e.message else null
+                )
             }
         }
     }

@@ -122,7 +122,7 @@ data class PendingTicketEntity(
     @ColumnInfo(name = "session_key") val sessionKey: String?,
     @ColumnInfo(name = "total_mise") val totalMise: Double,
     @ColumnInfo(name = "lines_summary") val linesSummary: String,  // Human-readable summary
-    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "created_at") val createdAt: Long = com.gaboom.agent.data.clock.SecuredClock.now(),
     @ColumnInfo(name = "sync_status") val syncStatus: SyncStatus = SyncStatus.PENDING,
     @ColumnInfo(name = "retry_count") val retryCount: Int = 0,
     @ColumnInfo(name = "last_retry_at") val lastRetryAt: Long? = null,

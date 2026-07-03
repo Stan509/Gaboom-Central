@@ -115,9 +115,28 @@ class DynamicRetrofitProvider @Inject constructor(
             }
             chain.proceed(request)
         }
+
+        val clockInterceptor = Interceptor { chain ->
+            val request = chain.request()
+            val response = chain.proceed(request)
+            val dateHeader = response.header("Date")
+            if (dateHeader != null) {
+                try {
+                    val format = java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", java.util.Locale.US)
+                    val serverTime = format.parse(dateHeader)?.time
+                    if (serverTime != null) {
+                        com.gaboom.agent.data.clock.SecuredClock.update(serverTime)
+                    }
+                } catch (e: Exception) {
+                    // Ignore date parsing errors
+                }
+            }
+            response
+        }
         
         return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .addInterceptor(clockInterceptor)
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

@@ -27,24 +27,13 @@ class TrustedClockAuthority : ClockAuthority {
     private var isTampered = false
 
     override fun getCurrentTime(): Long {
-        if (!FeatureFlags.isEnabled("LOTTERY_CLOCK")) {
-            // Fallback system clock if feature flag is disabled
-            return System.currentTimeMillis()
-        }
-
-        // Trusted hierarchy calculation:
-        // Last Server Signed Time + Elapsed Duration since last sync
-        val elapsed = System.currentTimeMillis() - lastSyncLocalTime
-        return if (lastServerTime > 0L) {
-            lastServerTime + elapsed
-        } else {
-            System.currentTimeMillis()
-        }
+        return SecuredClock.now()
     }
 
     override fun verifyDrift(serverTime: Long): Long {
         lastServerTime = serverTime
         lastSyncLocalTime = System.currentTimeMillis()
+        SecuredClock.update(serverTime)
         
         val localTime = System.currentTimeMillis()
         val drift = Math.abs(localTime - serverTime)

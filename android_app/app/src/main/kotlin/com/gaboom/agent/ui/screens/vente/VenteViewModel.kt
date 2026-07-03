@@ -1102,7 +1102,7 @@ class VenteViewModel @Inject constructor(
         
         val request = MultiTicketCreateRequest(
             tirageIds = listOf(tirage.id),
-            entries = apiLines.map { MultiTicketEntry(game = it.jeu, number = it.valeur, stake = it.mise, gratuit = it.gratuit) },
+            entries = apiLines.map { MultiTicketEntry(game = it.jeu, number = it.valeur, stake = it.mise, gratuit = it.gratuit, option = if (it.option > 0) it.option else null) },
             sessionKey = tirage.sessionKey
         )
         

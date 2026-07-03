@@ -3,6 +3,7 @@ package com.gaboom.agent.ui.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.gaboom.agent.data.api.AgentApiService
+import com.gaboom.agent.data.config.AgentConfigDataStore
 import com.gaboom.agent.data.local.PendingTicketDao
 import com.gaboom.agent.data.network.NetworkMonitor
 import com.gaboom.agent.data.repository.AuthRepository
@@ -33,7 +34,8 @@ class HomeViewModel @Inject constructor(
     private val apiService: AgentApiService,
     private val authRepository: AuthRepository,
     private val pendingTicketDao: PendingTicketDao,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val agentConfigDataStore: AgentConfigDataStore
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -80,14 +82,41 @@ class HomeViewModel @Inject constructor(
             try {
                 val response = apiService.getDashboard(7)
                 if (response.isSuccessful && response.body()?.success == true) {
-                    val global = response.body()!!.global
+                    val body = response.body()!!
+                    agentConfigDataStore.saveCachedDashboard(body)
+                    val global = body.global
                     _uiState.value = _uiState.value.copy(
                         gainsTotaux = global?.gainsTotaux ?: 0.0,
                         soldeCaisse = global?.soldeCaisse ?: 0.0,
                         statsLoaded = true
                     )
+                    
+                    // Pre-fetch and cache results
+                    try {
+                        val resultsResponse = apiService.getResultats()
+                        if (resultsResponse.isSuccessful && resultsResponse.body()?.success == true) {
+                            val results = resultsResponse.body()?.resultats ?: emptyList()
+                            agentConfigDataStore.saveCachedResultats(results)
+                        }
+                    } catch (_: Exception) {}
+                } else {
+                    loadCachedQuickStats()
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                loadCachedQuickStats()
+            }
+        }
+    }
+
+    private suspend fun loadCachedQuickStats() {
+        val cached = agentConfigDataStore.getCachedDashboard()
+        if (cached != null) {
+            val global = cached.global
+            _uiState.value = _uiState.value.copy(
+                gainsTotaux = global?.gainsTotaux ?: 0.0,
+                soldeCaisse = global?.soldeCaisse ?: 0.0,
+                statsLoaded = true
+            )
         }
     }
 

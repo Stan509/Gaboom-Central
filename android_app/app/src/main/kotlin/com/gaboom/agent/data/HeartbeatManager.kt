@@ -27,6 +27,7 @@ class HeartbeatManager @Inject constructor(
     private var heartbeatJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var lastLocation: Location? = null
+    private var isLocationListenerRegistered = false
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
@@ -43,12 +44,20 @@ class HeartbeatManager @Inject constructor(
     }
 
     fun start() {
-        if (heartbeatJob?.isActive == true) return
+        if (heartbeatJob?.isActive == true) {
+            if (!isLocationListenerRegistered) {
+                registerLocationListener()
+            }
+            return
+        }
         
         registerLocationListener()
         
         heartbeatJob = scope.launch {
             while (isActive) {
+                if (!isLocationListenerRegistered) {
+                    registerLocationListener()
+                }
                 try {
                     val loc = lastLocation ?: getLastKnownLocation()
                     val req = HeartbeatRequest(
@@ -73,13 +82,14 @@ class HeartbeatManager @Inject constructor(
     fun isRunning(): Boolean = heartbeatJob?.isActive == true
 
     private fun registerLocationListener() {
+        if (isLocationListenerRegistered) return
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return
         }
         try {
             val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
-            
+            var registered = false
             if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
                 locationManager.requestLocationUpdates(
                     LocationManager.GPS_PROVIDER,
@@ -87,6 +97,7 @@ class HeartbeatManager @Inject constructor(
                     10f,
                     locationListener
                 )
+                registered = true
             }
             if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
                 locationManager.requestLocationUpdates(
@@ -95,7 +106,9 @@ class HeartbeatManager @Inject constructor(
                     10f,
                     locationListener
                 )
+                registered = true
             }
+            isLocationListenerRegistered = registered
         } catch (e: SecurityException) {
             // Ignore
         } catch (e: Exception) {
@@ -107,6 +120,7 @@ class HeartbeatManager @Inject constructor(
         try {
             val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
             locationManager.removeUpdates(locationListener)
+            isLocationListenerRegistered = false
         } catch (e: Exception) {
             // Ignore
         }

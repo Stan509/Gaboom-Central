@@ -790,10 +790,46 @@ class VenteViewModel @Inject constructor(
             }
 
             if (!networkMonitor.isCurrentlyOnline()) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "Connexion requise pour enregistrer et partager"
-                )
+                try {
+                    val tirage = _uiState.value.availableTirages.find { it.id == tirageId }
+                    if (tirage == null) {
+                        _uiState.value = _uiState.value.copy(isLoading = false, error = "Tirage non trouvé pour mode hors-ligne")
+                        return@launch
+                    }
+                    
+                    val dummyTicketInfo = saveTicketOffline(tirage, apiLines)
+                    
+                    val now = java.time.LocalDateTime.now()
+                    val shareInfo = TicketShareInfo(
+                        ticketNo = dummyTicketInfo.ticketNo,
+                        tirageNom = dummyTicketInfo.tirageNom,
+                        date = now.toLocalDate().toString(),
+                        time = now.toLocalTime().toString().take(5),
+                        lines = apiLines.map { "${it.jeu}:${it.valeur}:${it.option}" to it.mise },
+                        totalMise = dummyTicketInfo.totalMise,
+                        groupId = null,
+                        ticketId = dummyTicketInfo.ticketId,
+                        borletteName = _uiState.value.borletteName,
+                        borletteSlogan = _uiState.value.borletteSlogan,
+                        borletteTel = _uiState.value.borletteTel,
+                        borletteAdresse = _uiState.value.borletteAdresse,
+                        borletteLogoUrl = _uiState.value.borletteLogoUrl,
+                        agentName = _uiState.value.agentName,
+                        ticketFooterText = _uiState.value.ticketFooterText,
+                        mariageGratuitActif = _uiState.value.mariageGratuitActif,
+                        mariageGratuitMontant = _uiState.value.mariageGratuitMontant,
+                        isOffline = true
+                    )
+                    
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        ticketCreated = true,
+                        ticketToShare = shareInfo,
+                        error = "Ticket créé hors ligne (HL)"
+                    )
+                } catch (e: Exception) {
+                    _uiState.value = _uiState.value.copy(isLoading = false, error = "Erreur hors-ligne: ${e.message}")
+                }
                 return@launch
             }
 
@@ -884,14 +920,6 @@ class VenteViewModel @Inject constructor(
                 creationProgress = "Création..."
             )
 
-            if (!networkMonitor.isCurrentlyOnline()) {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    error = "Connexion requise pour enregistrer et partager"
-                )
-                return@launch
-            }
-
             try {
                 val entries = _uiState.value.lines.flatMap { line ->
                     val expandedBets = LotoOptionsHelper.expandLineToBets(line)
@@ -919,6 +947,61 @@ class VenteViewModel @Inject constructor(
 
                 if (entries.isEmpty()) {
                     _uiState.value = _uiState.value.copy(isLoading = false, error = "Aucune entrée valide")
+                    return@launch
+                }
+
+                if (!networkMonitor.isCurrentlyOnline()) {
+                    // Offline Multi-Tirage: Save each one as HL
+                    try {
+                        val selectedTirages = _uiState.value.availableTirages.filter { it.id in selectedIds }
+                        val createdOffline = mutableListOf<CreatedTicketInfo>()
+                        
+                        selectedTirages.forEach { tirage ->
+                            val offlineInfo = saveTicketOffline(
+                                tirage = tirage,
+                                apiLines = entries.map { TicketLine(jeu = it.game, valeur = it.number, mise = it.stake, gratuit = it.gratuit, option = it.option ?: 1) }
+                            )
+                            createdOffline.add(offlineInfo)
+                        }
+                        
+                        val now = java.time.LocalDateTime.now()
+                        val firstTicket = createdOffline.first()
+                        val tirageNames = createdOffline.joinToString(", ") { it.tirageNom }
+                        val shareInfo = TicketShareInfo(
+                            ticketNo = if (createdOffline.size > 1) "${createdOffline.size} tickets" else firstTicket.ticketNo,
+                            tirageNom = tirageNames,
+                            date = now.toLocalDate().toString(),
+                            time = now.toLocalTime().toString().take(5),
+                            lines = entries.map { "${it.game}:${it.number}:${it.option ?: 1}" to it.stake },
+                            totalMise = createdOffline.sumOf { it.totalMise },
+                            groupId = firstTicket.ticketId, // Use ticket UUID as group ID offline
+                            ticketId = firstTicket.ticketId,
+                            borletteName = _uiState.value.borletteName,
+                            borletteSlogan = _uiState.value.borletteSlogan,
+                            borletteTel = _uiState.value.borletteTel,
+                            borletteAdresse = _uiState.value.borletteAdresse,
+                            borletteLogoUrl = _uiState.value.borletteLogoUrl,
+                            agentName = _uiState.value.agentName,
+                            ticketFooterText = _uiState.value.ticketFooterText,
+                            mariageGratuitActif = _uiState.value.mariageGratuitActif,
+                            mariageGratuitMontant = _uiState.value.mariageGratuitMontant,
+                            isOffline = true
+                        )
+                        
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            ticketCreated = true,
+                            ticketToShare = shareInfo,
+                            creationProgress = null,
+                            error = "Tickets créés hors ligne (${createdOffline.size})"
+                        )
+                    } catch (e: Exception) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoading = false,
+                            creationProgress = null,
+                            error = "Erreur hors-ligne multiple: ${e.message}"
+                        )
+                    }
                     return@launch
                 }
 
@@ -1311,6 +1394,30 @@ class VenteViewModel @Inject constructor(
                             createdOffline.add(offlineInfo)
                         }
                         
+                        val now = java.time.LocalDateTime.now()
+                        val firstTicket = createdOffline.first()
+                        val tirageNames = createdOffline.joinToString(", ") { it.tirageNom }
+                        val shareInfo = TicketShareInfo(
+                            ticketNo = if (createdOffline.size > 1) "${createdOffline.size} tickets" else firstTicket.ticketNo,
+                            tirageNom = tirageNames,
+                            date = now.toLocalDate().toString(),
+                            time = now.toLocalTime().toString().take(5),
+                            lines = entries.map { "${it.game}:${it.number}:${it.option ?: 1}" to it.stake },
+                            totalMise = createdOffline.sumOf { it.totalMise },
+                            groupId = firstTicket.ticketId,
+                            ticketId = firstTicket.ticketId,
+                            borletteName = _uiState.value.borletteName,
+                            borletteSlogan = _uiState.value.borletteSlogan,
+                            borletteTel = _uiState.value.borletteTel,
+                            borletteAdresse = _uiState.value.borletteAdresse,
+                            borletteLogoUrl = _uiState.value.borletteLogoUrl,
+                            agentName = _uiState.value.agentName,
+                            ticketFooterText = _uiState.value.ticketFooterText,
+                            mariageGratuitActif = _uiState.value.mariageGratuitActif,
+                            mariageGratuitMontant = _uiState.value.mariageGratuitMontant,
+                            isOffline = true
+                        )
+                        
                         val allowOfflinePrint = agentConfigDataStore.getAllowOfflinePrint()
                         if (allowOfflinePrint) {
                             _uiState.value = _uiState.value.copy(
@@ -1318,6 +1425,7 @@ class VenteViewModel @Inject constructor(
                                 createdTickets = createdOffline,
                                 currentPrintIndex = 0,
                                 ticketCreated = false, // Keep false while printing!
+                                ticketToShare = shareInfo,
                                 error = "Tickets créés hors ligne (${createdOffline.size})"
                             )
                             printCurrentTicketMulti()
@@ -1327,6 +1435,7 @@ class VenteViewModel @Inject constructor(
                                 createdTickets = createdOffline,
                                 currentPrintIndex = 0,
                                 ticketCreated = true,
+                                ticketToShare = shareInfo,
                                 error = "Tickets créés hors ligne (${createdOffline.size})"
                             )
                         }

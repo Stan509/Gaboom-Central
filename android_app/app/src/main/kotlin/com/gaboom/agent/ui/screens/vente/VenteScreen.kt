@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -302,7 +303,7 @@ fun VenteScreen(
                     Switch(
                         checked = uiState.multiTirageMode,
                         onCheckedChange = { viewModel.toggleMultiTirageMode(it) },
-                        modifier = Modifier.scale(0.6f).height(24.dp)
+                        modifier = Modifier.graphicsLayer(scaleX = 0.6f, scaleY = 0.6f).height(24.dp)
                     )
                 }
 
@@ -1675,7 +1676,7 @@ fun VenteScreen(
             text = {
                 OutlinedTextField(
                     value = stakeInput,
-                    onValueChange = { if (it.all { c -> c.isDigit() }) stakeInput = it },
+                    onValueChange = { newVal: String -> if (newVal.all { c -> c.isDigit() }) stakeInput = newVal },
                     label = { Text("Mise") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
@@ -1710,7 +1711,7 @@ fun VenteScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = stakeInput,
-                        onValueChange = { if (it.all { c -> c.isDigit() }) stakeInput = it },
+                        onValueChange = { newVal: String -> if (newVal.all { c -> c.isDigit() }) stakeInput = newVal },
                         label = { Text("Mise") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
@@ -1748,7 +1749,7 @@ fun VenteScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = digitInput,
-                        onValueChange = { if (it.all { c -> c.isDigit() } && it.length <= 1) digitInput = it },
+                        onValueChange = { newVal: String -> if (newVal.all { c -> c.isDigit() } && newVal.length <= 1) digitInput = newVal },
                         label = { Text("Chiffre (0-9)") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
@@ -1756,7 +1757,7 @@ fun VenteScreen(
                     )
                     OutlinedTextField(
                         value = stakeInput,
-                        onValueChange = { if (it.all { c -> c.isDigit() }) stakeInput = it },
+                        onValueChange = { newVal: String -> if (newVal.all { c -> c.isDigit() }) stakeInput = newVal },
                         label = { Text("Mise") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,

@@ -963,7 +963,10 @@ class VenteViewModel @Inject constructor(
 
     private suspend fun createTicketOffline(tirageId: Int, apiLines: List<TicketLine>) {
         try {
+            // Try to find tirage in current state or cached tirages
             val tirage = _uiState.value.availableTirages.find { it.id == tirageId }
+                ?: agentConfigDataStore.getCachedTirages().find { it.id == tirageId }
+            
             if (tirage == null) {
                 _uiState.value = _uiState.value.copy(isLoading = false, error = "Tirage non trouvé pour mode hors-ligne")
                 return
@@ -1013,7 +1016,16 @@ class VenteViewModel @Inject constructor(
 
     private suspend fun createMultiTicketsOffline(selectedIds: List<Int>, entries: List<MultiTicketEntry>, triggerShareOnly: Boolean = false) {
         try {
-            val selectedTirages = _uiState.value.availableTirages.filter { it.id in selectedIds }
+            // Try current state first, fall back to cached tirages
+            val currentTirages = _uiState.value.availableTirages.filter { it.id in selectedIds }
+            val cachedTirages = if (currentTirages.size < selectedIds.size) {
+                agentConfigDataStore.getCachedTirages().filter { it.id in selectedIds }
+            } else emptyList()
+            val selectedTirages = if (currentTirages.size == selectedIds.size) currentTirages else cachedTirages
+            if (selectedTirages.isEmpty()) {
+                _uiState.value = _uiState.value.copy(isLoading = false, error = "Tirages non disponibles pour mode hors-ligne")
+                return
+            }
             val createdOffline = mutableListOf<CreatedTicketInfo>()
             
             selectedTirages.forEach { tirage ->

@@ -99,6 +99,11 @@ object AppModule {
         return database.pendingTicketDao()
     }
 
+    @Provides
+    fun provideDrawCacheDao(database: AgentDatabase): com.gaboom.agent.data.local.DrawCacheDao {
+        return database.drawCacheDao()
+    }
+
     // ─── Network & Sync ────────────────────────────────────────────────────────
 
     @Provides

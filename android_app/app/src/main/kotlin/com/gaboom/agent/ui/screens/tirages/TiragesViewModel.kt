@@ -2,9 +2,8 @@ package com.gaboom.agent.ui.screens.tirages
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.gaboom.agent.data.api.AgentApiService
 import com.gaboom.agent.data.model.Tirage
-import com.gaboom.agent.data.config.AgentConfigDataStore
+import com.gaboom.agent.data.repository.DrawRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,8 +24,7 @@ data class TiragesUiState(
 
 @HiltViewModel
 class TiragesViewModel @Inject constructor(
-    private val apiService: AgentApiService,
-    private val agentConfigDataStore: AgentConfigDataStore
+    private val drawRepository: DrawRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TiragesUiState())
@@ -44,48 +42,24 @@ class TiragesViewModel @Inject constructor(
     fun loadTirages() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-
-            try {
-                val response = apiService.getTiragesActifs()
-                if (response.isSuccessful) {
-                    val body = response.body()
-                    if (body?.success == true) {
-                        val allTirages = body.tirages ?: emptyList()
-                        agentConfigDataStore.saveCachedTirages(allTirages)
-                        val now = java.time.LocalTime.now()
-                        val syncTime = String.format("%02d:%02d", now.hour, now.minute)
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            tirages = allTirages,
-                            isOnline = true,
-                            lastSyncTime = syncTime,
-                            serverTime = body.serverTime,
-                            error = null
-                        )
-                    } else {
-                        val cached = agentConfigDataStore.getCachedTirages()
-                        _uiState.value = _uiState.value.copy(
-                            isLoading = false,
-                            tirages = cached,
-                            error = body?.error ?: "Erreur",
-                            isOnline = true
-                        )
-                    }
-                } else {
-                    val cached = agentConfigDataStore.getCachedTirages()
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        tirages = cached,
-                        error = "Erreur serveur",
-                        isOnline = false
-                    )
-                }
-            } catch (e: Exception) {
-                val cached = agentConfigDataStore.getCachedTirages()
+            val response = drawRepository.getTiragesActifs()
+            if (response.isSuccessful && response.body()?.success == true) {
+                val body = response.body()!!
+                val allTirages = body.tirages ?: emptyList()
+                val now = java.time.LocalTime.now()
+                val syncTime = String.format("%02d:%02d", now.hour, now.minute)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    tirages = cached,
-                    error = "Erreur réseau: ${e.message}",
+                    tirages = allTirages,
+                    isOnline = true,
+                    lastSyncTime = syncTime,
+                    serverTime = body.serverTime,
+                    error = null
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = response.body()?.error ?: "Erreur serveur",
                     isOnline = false
                 )
             }

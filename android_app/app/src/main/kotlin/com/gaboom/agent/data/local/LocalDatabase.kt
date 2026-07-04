@@ -274,9 +274,10 @@ interface PendingTicketDao {
         SyncQueueEntity::class,
         IntegrityEventEntity::class,
         DeviceIdentityEntity::class,
-        ClockHistoryEntity::class
+        ClockHistoryEntity::class,
+        DrawCacheEntity::class
     ],
-    version = 5,  // Bumped for Phase 2 entities
+    version = 6,  // Bumped for Phase 2C draw_cache
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -292,6 +293,7 @@ abstract class AgentDatabase : RoomDatabase() {
     abstract fun offlineSessionDao(): OfflineSessionDao
     abstract fun integrityEventDao(): IntegrityEventDao
     abstract fun deviceIdentityDao(): DeviceIdentityDao
+    abstract fun drawCacheDao(): DrawCacheDao
 }
 
 /**

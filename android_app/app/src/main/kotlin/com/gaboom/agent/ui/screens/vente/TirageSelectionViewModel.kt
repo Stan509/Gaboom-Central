@@ -2,9 +2,8 @@ package com.gaboom.agent.ui.screens.vente
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.gaboom.agent.data.api.AgentApiService
 import com.gaboom.agent.data.model.Tirage
-import com.gaboom.agent.data.config.AgentConfigDataStore
+import com.gaboom.agent.data.repository.DrawRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,8 +19,7 @@ data class TirageSelectionUiState(
 
 @HiltViewModel
 class TirageSelectionViewModel @Inject constructor(
-    private val apiService: AgentApiService,
-    private val agentConfigDataStore: AgentConfigDataStore
+    private val drawRepository: DrawRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(TirageSelectionUiState())
@@ -30,30 +28,18 @@ class TirageSelectionViewModel @Inject constructor(
     fun loadOpenTirages() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            try {
-                val response = apiService.getTiragesActifs()
-                if (response.isSuccessful) {
-                    val allTirages = response.body()?.tirages ?: emptyList()
-                    agentConfigDataStore.saveCachedTirages(allTirages)
-                    val tirages = allTirages.filter { it.etat == "OUVERT" }
-                    _uiState.value = _uiState.value.copy(
-                        tirages = tirages,
-                        isLoading = false
-                    )
-                } else {
-                    val cached = agentConfigDataStore.getCachedTirages()
-                    _uiState.value = _uiState.value.copy(
-                        tirages = cached.filter { it.etat == "OUVERT" },
-                        isLoading = false,
-                        error = if (cached.isEmpty()) "Erreur chargement tirages" else null
-                    )
-                }
-            } catch (e: Exception) {
-                val cached = agentConfigDataStore.getCachedTirages()
+            val response = drawRepository.getTiragesActifs()
+            if (response.isSuccessful && response.body()?.success == true) {
+                val allTirages = response.body()?.tirages ?: emptyList()
+                val tirages = allTirages.filter { it.etat == "OUVERT" }
                 _uiState.value = _uiState.value.copy(
-                    tirages = cached.filter { it.etat == "OUVERT" },
+                    tirages = tirages,
+                    isLoading = false
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = if (cached.isEmpty()) "Erreur: ${e.message}" else null
+                    error = response.body()?.error ?: "Erreur chargement tirages"
                 )
             }
         }

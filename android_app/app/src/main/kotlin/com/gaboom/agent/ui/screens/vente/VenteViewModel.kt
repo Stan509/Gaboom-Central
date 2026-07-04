@@ -2,7 +2,8 @@ package com.gaboom.agent.ui.screens.vente
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.gaboom.agent.data.api.AgentApiService
+import com.gaboom.agent.data.repository.TicketRepository
+import com.gaboom.agent.data.repository.DrawRepository
 import com.gaboom.agent.data.model.TicketCreateRequest
 import com.gaboom.agent.data.model.TicketLine
 import com.gaboom.agent.data.model.TicketLineWithOptions
@@ -96,7 +97,8 @@ data class VenteUiState(
 
 @HiltViewModel
 class VenteViewModel @Inject constructor(
-    private val apiService: AgentApiService,
+    private val ticketRepository: TicketRepository,
+    private val drawRepository: DrawRepository,
     private val printer: BluetoothPrinter,
     private val agentConfigDataStore: AgentConfigDataStore,
     private val authRepository: AuthRepository,
@@ -142,7 +144,7 @@ class VenteViewModel @Inject constructor(
     private suspend fun loadAvailableTiragesOnInit() {
         _uiState.value = _uiState.value.copy(isLoadingTirages = true)
         try {
-            val response = apiService.getTiragesActifs()
+            val response = drawRepository.getTiragesActifs()
             if (response.isSuccessful) {
                 val allTirages = response.body()?.tirages ?: emptyList()
                 agentConfigDataStore.saveCachedTirages(allTirages)
@@ -697,7 +699,7 @@ class VenteViewModel @Inject constructor(
                     lines = apiLines
                 )
 
-                val response = apiService.createTicket(request)
+                val response = ticketRepository.createTicket(request, tirageId, apiLines)
                 if (response.isSuccessful) {
                     val body = response.body()
                     if (body?.success == true && body.ticket != null) {
@@ -757,7 +759,7 @@ class VenteViewModel @Inject constructor(
                     lines = apiLines
                 )
 
-                val response = apiService.createTicket(request)
+                val response = ticketRepository.createTicket(request, tirageId, apiLines)
                 if (response.isSuccessful) {
                     val body = response.body()
                     if (body?.success == true && body.ticket != null) {
@@ -893,7 +895,7 @@ class VenteViewModel @Inject constructor(
                     sessionKey = sessionKey
                 )
 
-                val response = apiService.createMultiTicket(request)
+                val response = ticketRepository.createMultiTicket(request)
                 
                 if (response.isSuccessful) {
                     val body = response.body()
@@ -1178,7 +1180,7 @@ class VenteViewModel @Inject constructor(
 
     private suspend fun printTicket(ticketId: String): com.gaboom.agent.data.model.PrintData? {
         return try {
-            val printResponse = apiService.getTicketPrint(ticketId)
+            val printResponse = ticketRepository.getTicketPrint(ticketId)
             if (printResponse.isSuccessful) {
                 val printData = printResponse.body()?.printData
                 if (printData != null) {
@@ -1235,7 +1237,7 @@ class VenteViewModel @Inject constructor(
     private suspend fun loadAvailableTiragesForDefault(defaultTirageId: Int) {
         _uiState.value = _uiState.value.copy(isLoadingTirages = true)
         try {
-            val response = apiService.getTiragesActifs()
+            val response = drawRepository.getTiragesActifs()
             if (response.isSuccessful) {
                 val allTirages = response.body()?.tirages ?: emptyList()
                 agentConfigDataStore.saveCachedTirages(allTirages)
@@ -1285,7 +1287,7 @@ class VenteViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoadingTirages = true)
             try {
-                val response = apiService.getTiragesActifs()
+                val response = drawRepository.getTiragesActifs()
                 if (response.isSuccessful) {
                     val allTirages = response.body()?.tirages ?: emptyList()
                     agentConfigDataStore.saveCachedTirages(allTirages)
@@ -1408,7 +1410,7 @@ class VenteViewModel @Inject constructor(
                     sessionKey = sessionKey
                 )
 
-                val response = apiService.createMultiTicket(request)
+                val response = ticketRepository.createMultiTicket(request)
                 
                 if (response.isSuccessful) {
                     val body = response.body()
@@ -1513,7 +1515,7 @@ class VenteViewModel @Inject constructor(
                     val apiLines = _uiState.value.lines.flatMap { it.toApiLines() }
                     buildOfflinePrintData(ticket, apiLines)
                 } else {
-                    val printResponse = apiService.getTicketPrint(ticket.ticketId)
+                    val printResponse = ticketRepository.getTicketPrint(ticket.ticketId)
                     if (printResponse.isSuccessful) {
                         printResponse.body()?.printData
                     } else {
@@ -1613,7 +1615,7 @@ class VenteViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
-                val response = apiService.getTicketBlueprint(ticketId)
+                val response = ticketRepository.getTicketBlueprint(ticketId)
                 if (response.isSuccessful) {
                     val body = response.body()
                     if (body?.success == true && body.lines != null) {

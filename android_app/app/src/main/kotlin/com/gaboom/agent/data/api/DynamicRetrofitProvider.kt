@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.gaboom.agent.data.config.AppConfigDataStore
+import com.gaboom.agent.data.config.FeatureFlags
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -85,8 +86,15 @@ class DynamicRetrofitProvider @Inject constructor(
     private fun buildRetrofit(baseUrl: String): Retrofit {
         val okHttpClient = buildOkHttpClient()
         
+        // Swap base url to Go Gateway if flag is enabled
+        val targetUrl = if (FeatureFlags.isEnabled("GO_GATEWAY")) {
+            "http://127.0.0.1:8080/api/agent/"
+        } else {
+            baseUrl
+        }
+        
         // Ensure base URL ends with /
-        val normalizedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
+        val normalizedUrl = if (targetUrl.endsWith("/")) targetUrl else "$targetUrl/"
         
         return Retrofit.Builder()
             .baseUrl(normalizedUrl)

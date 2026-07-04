@@ -2,7 +2,7 @@ package com.gaboom.agent.ui.screens.historique
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.gaboom.agent.data.api.AgentApiService
+import com.gaboom.agent.data.repository.TicketRepository
 import com.gaboom.agent.data.model.TicketInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,7 +19,7 @@ data class HistoriqueUiState(
 
 @HiltViewModel
 class HistoriqueViewModel @Inject constructor(
-    private val apiService: AgentApiService
+    private val ticketRepository: TicketRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HistoriqueUiState())
@@ -28,18 +28,14 @@ class HistoriqueViewModel @Inject constructor(
     fun loadHistorique() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-            try {
-                val response = apiService.getHistorique()
-                if (response.isSuccessful && response.body()?.success == true) {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        tickets = response.body()?.tickets ?: emptyList()
-                    )
-                } else {
-                    _uiState.value = _uiState.value.copy(isLoading = false)
-                }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isLoading = false, error = e.message)
+            val response = ticketRepository.getHistorique()
+            if (response.isSuccessful && response.body()?.success == true) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    tickets = response.body()?.tickets ?: emptyList()
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(isLoading = false, error = response.body()?.error)
             }
         }
     }

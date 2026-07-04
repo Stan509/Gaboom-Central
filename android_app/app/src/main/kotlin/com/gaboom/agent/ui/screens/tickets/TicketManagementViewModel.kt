@@ -2,10 +2,11 @@ package com.gaboom.agent.ui.screens.tickets
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.gaboom.agent.data.api.AgentApiService
 import com.gaboom.agent.data.model.TicketGroupItem
 import com.gaboom.agent.data.model.TicketListItem
 import com.gaboom.agent.data.model.Tirage
+import com.gaboom.agent.data.repository.TicketRepository
+import com.gaboom.agent.data.repository.DrawRepository
 import com.gaboom.agent.print.BluetoothPrinter
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,7 +59,8 @@ data class TicketManagementUiState(
 
 @HiltViewModel
 class TicketManagementViewModel @Inject constructor(
-    private val apiService: AgentApiService,
+    private val ticketRepository: TicketRepository,
+    private val drawRepository: DrawRepository,
     private val bluetoothPrinter: BluetoothPrinter,
     private val pendingTicketDao: com.gaboom.agent.data.local.PendingTicketDao,
     private val agentConfigDataStore: com.gaboom.agent.data.config.AgentConfigDataStore
@@ -74,18 +76,13 @@ class TicketManagementViewModel @Inject constructor(
 
     private fun loadTirages() {
         viewModelScope.launch {
-            try {
-                val response = apiService.getTiragesActifs()
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val tirages = response.body()?.tirages ?: emptyList()
-                    _uiState.value = _uiState.value.copy(
-                        availableTirages = tirages
-                    )
-                } else {
-                    val cached = agentConfigDataStore.getCachedTirages()
-                    _uiState.value = _uiState.value.copy(availableTirages = cached)
-                }
-            } catch (e: Exception) {
+            val response = drawRepository.getTiragesActifs()
+            if (response.isSuccessful && response.body()?.success == true) {
+                val tirages = response.body()?.tirages ?: emptyList()
+                _uiState.value = _uiState.value.copy(
+                    availableTirages = tirages
+                )
+            } else {
                 val cached = agentConfigDataStore.getCachedTirages()
                 _uiState.value = _uiState.value.copy(availableTirages = cached)
             }
@@ -107,51 +104,28 @@ class TicketManagementViewModel @Inject constructor(
             val pendingEntities = pendingTicketDao.getAll()
             val pendingListItems = pendingEntities.map { mapPendingToListItem(it) }
 
-            try {
-                val dateStr = currentState.selectedDate?.format(DateTimeFormatter.ISO_LOCAL_DATE)
-                val response = apiService.listTickets(
-                    date = dateStr,
-                    tirageId = currentState.selectedTirageId,
-                    status = currentState.statusFilter.value.ifEmpty { null },
-                    limit = currentState.pageSize,
-                    offset = offset
-                )
+            val response = ticketRepository.listTickets(currentState.pageSize, offset)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val body = response.body()!!
+                val newTickets = body.tickets ?: emptyList()
 
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val body = response.body()!!
-                    val newTickets = body.tickets ?: emptyList()
-
-                    if (refresh) {
-                        agentConfigDataStore.saveCachedTicketList(newTickets)
-                    } else {
-                        val deduplicated = (agentConfigDataStore.getCachedTicketList() + newTickets).distinctBy { it.id }
-                        agentConfigDataStore.saveCachedTicketList(deduplicated)
-                    }
-
-                    val rawList = if (refresh) newTickets else currentState.tickets + newTickets
-                    val mergedList = pendingListItems + rawList.filter { raw -> pendingListItems.none { p -> p.id == raw.id } }
-
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        tickets = mergedList,
-                        totalTickets = body.total ?: mergedList.size,
-                        hasMore = newTickets.size >= currentState.pageSize
-                    )
+                if (refresh) {
+                    agentConfigDataStore.saveCachedTicketList(newTickets)
                 } else {
-                    // Fail fallback to cache + local pending
-                    val cachedTickets = agentConfigDataStore.getCachedTicketList()
-                    val filteredCached = filterList(cachedTickets, currentState)
-                    val mergedList = pendingListItems + filteredCached.filter { raw -> pendingListItems.none { p -> p.id == raw.id } }
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        tickets = mergedList,
-                        totalTickets = mergedList.size,
-                        hasMore = false,
-                        error = if (cachedTickets.isEmpty()) (response.body()?.error ?: "Erreur serveur") else null
-                    )
+                    val deduplicated = (agentConfigDataStore.getCachedTicketList() + newTickets).distinctBy { it.id }
+                    agentConfigDataStore.saveCachedTicketList(deduplicated)
                 }
-            } catch (e: Exception) {
-                // Network error fallback to cache + local pending
+
+                val rawList = if (refresh) newTickets else currentState.tickets + newTickets
+                val mergedList = pendingListItems + rawList.filter { raw -> pendingListItems.none { p -> p.id == raw.id } }
+
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    tickets = mergedList,
+                    totalTickets = body.total ?: mergedList.size,
+                    hasMore = newTickets.size >= currentState.pageSize
+                )
+            } else {
                 val cachedTickets = agentConfigDataStore.getCachedTicketList()
                 val filteredCached = filterList(cachedTickets, currentState)
                 val mergedList = pendingListItems + filteredCached.filter { raw -> pendingListItems.none { p -> p.id == raw.id } }
@@ -160,7 +134,7 @@ class TicketManagementViewModel @Inject constructor(
                     tickets = mergedList,
                     totalTickets = mergedList.size,
                     hasMore = false,
-                    error = if (cachedTickets.isEmpty()) "Erreur réseau: ${e.message}" else null
+                    error = if (cachedTickets.isEmpty()) (response.body()?.error ?: "Erreur serveur") else null
                 )
             }
         }
@@ -210,20 +184,16 @@ class TicketManagementViewModel @Inject constructor(
 
     private fun filterList(list: List<TicketListItem>, state: TicketManagementUiState): List<TicketListItem> {
         var filtered = list
-        // Date filter
         if (state.selectedDate != null) {
             val dateStr = state.selectedDate.format(DateTimeFormatter.ISO_LOCAL_DATE)
             filtered = filtered.filter { it.createdAt.startsWith(dateStr) }
         }
-        // Tirage filter
         if (state.selectedTirageId != null) {
             filtered = filtered.filter { it.tirageId == state.selectedTirageId }
         }
-        // Status filter
         if (state.statusFilter != TicketStatusFilter.ALL) {
             filtered = filtered.filter { it.status == state.statusFilter.value }
         }
-        // Search query
         val query = state.searchQuery.trim().lowercase()
         if (query.isNotEmpty()) {
             filtered = filtered.filter {
@@ -265,58 +235,48 @@ class TicketManagementViewModel @Inject constructor(
             loadTickets(refresh = true)
             return
         }
-        
+
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            
-            try {
-                val response = apiService.searchTickets(query)
-                if (response.isSuccessful && response.body()?.success == true) {
-                    // Convert search results to list items (simplified)
-                    val searchResults = response.body()?.tickets ?: emptyList()
-                    val items = searchResults.map { result ->
-                        TicketListItem(
-                            id = result.id,
-                            numero = result.ticketNo,
-                            tirageId = result.tirageId,
-                            tirageNom = result.tirageNom,
-                            tirageOpen = false,
-                            status = when {
-                                result.statut == "ANNULE" -> "cancelled"
-                                result.isPaid -> "paid"
-                                result.isWinner -> "won"
-                                else -> "pending"
-                            },
-                            numBets = result.lines?.size ?: 0,
-                            totalMise = result.totalMise,
-                            totalGainDu = result.totalGainDu,
-                            totalGainPaye = 0.0,
-                            isWinner = result.isWinner,
-                            isPaid = result.isPaid,
-                            canPay = result.isWinner && !result.isPaid,
-                            canVoid = result.canVoid,
-                            canReprint = result.statut != "ANNULE",
-                            createdAt = result.createdAt,
-                            ageMinutes = 0.0
-                        )
-                    }
-                    
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        tickets = items,
-                        totalTickets = items.size,
-                        hasMore = false
-                    )
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = response.body()?.error ?: "Ticket non trouvé"
+            val response = ticketRepository.searchTickets(query)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val searchResults = response.body()?.tickets ?: emptyList()
+                val items = searchResults.map { result ->
+                    TicketListItem(
+                        id = result.id,
+                        numero = result.ticketNo,
+                        tirageId = result.tirageId,
+                        tirageNom = result.tirageNom,
+                        tirageOpen = false,
+                        status = when {
+                            result.statut == "ANNULE" -> "cancelled"
+                            result.isPaid -> "paid"
+                            result.isWinner -> "won"
+                            else -> "pending"
+                        },
+                        numBets = result.lines?.size ?: 0,
+                        totalMise = result.totalMise,
+                        totalGainDu = result.totalGainDu,
+                        totalGainPaye = 0.0,
+                        isWinner = result.isWinner,
+                        isPaid = result.isPaid,
+                        canPay = result.isWinner && !result.isPaid,
+                        canVoid = result.canVoid,
+                        canReprint = result.statut != "ANNULE",
+                        createdAt = result.createdAt,
+                        ageMinutes = 0.0
                     )
                 }
-            } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = "Erreur: ${e.message}"
+                    tickets = items,
+                    totalTickets = items.size,
+                    hasMore = false
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = response.body()?.error ?: "Ticket non trouvé"
                 )
             }
         }
@@ -325,27 +285,18 @@ class TicketManagementViewModel @Inject constructor(
     fun payTicket(ticketId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(payingTicketId = ticketId, error = null)
-            
-            try {
-                val response = apiService.payTicket(ticketId)
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val amount = response.body()?.amountPaid ?: 0.0
-                    _uiState.value = _uiState.value.copy(
-                        payingTicketId = null,
-                        successMessage = "Ticket payé: ${amount.toInt()} G"
-                    )
-                    // Refresh to update status
-                    loadTickets(refresh = true)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        payingTicketId = null,
-                        error = response.body()?.error ?: "Erreur lors du paiement"
-                    )
-                }
-            } catch (e: Exception) {
+            val response = ticketRepository.payTicket(ticketId)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val amount = response.body()?.amountPaid ?: 0.0
                 _uiState.value = _uiState.value.copy(
                     payingTicketId = null,
-                    error = "Erreur: ${e.message}"
+                    successMessage = "Ticket payé: ${amount.toInt()} G"
+                )
+                loadTickets(refresh = true)
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    payingTicketId = null,
+                    error = response.body()?.error ?: "Erreur lors du paiement"
                 )
             }
         }
@@ -354,72 +305,51 @@ class TicketManagementViewModel @Inject constructor(
     fun voidTicket(ticketId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(voidingTicketId = ticketId, error = null)
-            
-            try {
-                val response = apiService.voidTicket(ticketId)
-                if (response.isSuccessful && response.body()?.success == true) {
-                    _uiState.value = _uiState.value.copy(
-                        voidingTicketId = null,
-                        successMessage = "Ticket annulé"
-                    )
-                    // Refresh to update status
-                    loadTickets(refresh = true)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        voidingTicketId = null,
-                        error = response.body()?.error ?: "Erreur lors de l'annulation"
-                    )
-                }
-            } catch (e: Exception) {
+            val response = ticketRepository.voidTicket(ticketId)
+            if (response.isSuccessful && response.body()?.success == true) {
                 _uiState.value = _uiState.value.copy(
                     voidingTicketId = null,
-                    error = "Erreur: ${e.message}"
+                    successMessage = "Ticket annulé"
+                )
+                loadTickets(refresh = true)
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    voidingTicketId = null,
+                    error = response.body()?.error ?: "Erreur lors de l'annulation"
                 )
             }
         }
     }
 
     suspend fun voidTicketSync(ticketId: String): Boolean {
-        return try {
-            val response = apiService.voidTicket(ticketId)
-            response.isSuccessful && response.body()?.success == true
-        } catch (e: Exception) {
-            false
-        }
+        val response = ticketRepository.voidTicket(ticketId)
+        return response.isSuccessful && response.body()?.success == true
     }
 
     fun reprintTicket(ticketId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(reprintingTicketId = ticketId, error = null)
-            
-            try {
-                val response = apiService.getTicketPrint(ticketId)
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val printData = response.body()?.printData
-                    if (printData != null) {
-                        val printResult = bluetoothPrinter.printTicket(printData)
-                        if (printResult.isSuccess) {
-                            _uiState.value = _uiState.value.copy(
-                                reprintingTicketId = null,
-                                successMessage = "Ticket réimprimé"
-                            )
-                        } else {
-                            _uiState.value = _uiState.value.copy(
-                                reprintingTicketId = null,
-                                error = "Erreur impression: ${printResult.exceptionOrNull()?.message}"
-                            )
-                        }
+            val response = ticketRepository.getTicketPrint(ticketId)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val printData = response.body()?.printData
+                if (printData != null) {
+                    val printResult = bluetoothPrinter.printTicket(printData)
+                    if (printResult.isSuccess) {
+                        _uiState.value = _uiState.value.copy(
+                            reprintingTicketId = null,
+                            successMessage = "Ticket réimprimé"
+                        )
+                    } else {
+                        _uiState.value = _uiState.value.copy(
+                            reprintingTicketId = null,
+                            error = "Erreur impression: ${printResult.exceptionOrNull()?.message}"
+                        )
                     }
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        reprintingTicketId = null,
-                        error = response.body()?.error ?: "Erreur récupération données"
-                    )
                 }
-            } catch (e: Exception) {
+            } else {
                 _uiState.value = _uiState.value.copy(
                     reprintingTicketId = null,
-                    error = "Erreur: ${e.message}"
+                    error = response.body()?.error ?: "Erreur récupération données"
                 )
             }
         }
@@ -434,7 +364,6 @@ class TicketManagementViewModel @Inject constructor(
     }
 
     fun onQrCodeScanned(content: String) {
-        // QR code contains ticket number or ID
         _uiState.value = _uiState.value.copy(searchQuery = content)
         searchByQuery()
     }
@@ -442,24 +371,16 @@ class TicketManagementViewModel @Inject constructor(
     fun searchByGroupId(groupId: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isSearchingGroup = true, error = null)
-            
-            try {
-                val response = apiService.searchTicketsByGroup(groupId)
-                if (response.isSuccessful && response.body()?.success == true) {
-                    _uiState.value = _uiState.value.copy(
-                        isSearchingGroup = false,
-                        groupTickets = response.body()?.tickets ?: emptyList()
-                    )
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isSearchingGroup = false,
-                        error = response.body()?.error ?: "Aucun ticket trouvé pour ce QR code"
-                    )
-                }
-            } catch (e: Exception) {
+            val response = ticketRepository.searchTicketsByGroup(groupId)
+            if (response.isSuccessful && response.body()?.success == true) {
                 _uiState.value = _uiState.value.copy(
                     isSearchingGroup = false,
-                    error = "Erreur: ${e.message}"
+                    groupTickets = response.body()?.tickets ?: emptyList()
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isSearchingGroup = false,
+                    error = response.body()?.error ?: "Aucun ticket trouvé pour ce QR code"
                 )
             }
         }
@@ -470,14 +391,10 @@ class TicketManagementViewModel @Inject constructor(
     }
 
     suspend fun getTicketPrintData(ticketId: String): com.gaboom.agent.data.model.PrintData? {
-        return try {
-            val response = apiService.getTicketPrint(ticketId)
-            if (response.isSuccessful && response.body()?.success == true) {
-                response.body()?.printData
-            } else {
-                null
-            }
-        } catch (e: Exception) {
+        val response = ticketRepository.getTicketPrint(ticketId)
+        return if (response.isSuccessful && response.body()?.success == true) {
+            response.body()?.printData
+        } else {
             null
         }
     }

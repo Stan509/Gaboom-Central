@@ -6,7 +6,7 @@ import com.gaboom.agent.data.local.LocalTicketCache
 import com.gaboom.agent.data.local.LocalTicketCacheDao
 import com.gaboom.agent.data.local.TirageSessionCache
 import com.gaboom.agent.data.local.TirageSessionCacheDao
-import com.gaboom.agent.data.api.AgentApiService
+import com.gaboom.agent.data.repository.DrawRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +22,7 @@ data class TirageDetailUiState(
 
 @HiltViewModel
 class TirageDetailViewModel @Inject constructor(
-    private val apiService: AgentApiService,
+    private val drawRepository: DrawRepository,
     private val localTicketCacheDao: LocalTicketCacheDao,
     private val tirageSessionCacheDao: TirageSessionCacheDao
 ) : ViewModel() {
@@ -35,8 +35,8 @@ class TirageDetailViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true)
 
             try {
-                // Fetch current session_key from API
-                val response = apiService.getTiragesActifs()
+                // Fetch current session_key from repository
+                val response = drawRepository.getTiragesActifs()
                 if (response.isSuccessful) {
                     val tirages = response.body()?.tirages ?: emptyList()
                     val tirage = tirages.find { it.id == tirageId }

@@ -2,8 +2,7 @@ package com.gaboom.agent.ui.screens.stats
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.gaboom.agent.data.api.AgentApiService
-import com.gaboom.agent.data.config.AgentConfigDataStore
+import com.gaboom.agent.data.repository.StatsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -46,8 +45,7 @@ data class StatsUiState(
 
 @HiltViewModel
 class StatsViewModel @Inject constructor(
-    private val apiService: AgentApiService,
-    private val agentConfigDataStore: AgentConfigDataStore
+    private val statsRepository: StatsRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(StatsUiState())
@@ -56,27 +54,12 @@ class StatsViewModel @Inject constructor(
     fun loadStats(period: Int = _uiState.value.selectedPeriod) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, selectedPeriod = period, error = null, successMessage = null)
-            try {
-                val response = apiService.getDashboard(period)
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val body = response.body()!!
-                    agentConfigDataStore.saveCachedDashboard(body)
-                    applyDashboardData(body)
-                } else {
-                    val cached = agentConfigDataStore.getCachedDashboard()
-                    if (cached != null) {
-                        applyDashboardData(cached)
-                    } else {
-                        _uiState.value = _uiState.value.copy(isLoading = false, error = "Erreur de chargement")
-                    }
-                }
-            } catch (e: Exception) {
-                val cached = agentConfigDataStore.getCachedDashboard()
-                if (cached != null) {
-                    applyDashboardData(cached)
-                } else {
-                    _uiState.value = _uiState.value.copy(isLoading = false, error = e.message)
-                }
+            val response = statsRepository.getDashboard(period)
+            if (response.isSuccessful && response.body()?.success == true) {
+                val body = response.body()!!
+                applyDashboardData(body)
+            } else {
+                _uiState.value = _uiState.value.copy(isLoading = false, error = response.body()?.error ?: "Erreur de chargement")
             }
         }
     }
@@ -118,25 +101,21 @@ class StatsViewModel @Inject constructor(
     fun withdrawCommission() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isWithdrawing = true, error = null, successMessage = null)
-            try {
-                val response = apiService.withdrawCommission()
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val body = response.body()!!
-                    _uiState.value = _uiState.value.copy(
-                        isWithdrawing = false,
-                        successMessage = "Commission de ${body.amountWithdrawn?.toInt() ?: 0} HTG retirée!",
-                        commissionBalance = body.newBalance ?: 0.0
-                    )
-                    // Recharger les stats
-                    loadStats()
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isWithdrawing = false,
-                        error = response.body()?.error ?: "Erreur lors du retrait"
-                    )
-                }
-            } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(isWithdrawing = false, error = e.message)
+            val response = statsRepository.withdrawCommission()
+            if (response.isSuccessful && response.body()?.success == true) {
+                val body = response.body()!!
+                _uiState.value = _uiState.value.copy(
+                    isWithdrawing = false,
+                    successMessage = "Commission de ${body.amountWithdrawn?.toInt() ?: 0} HTG retirée!",
+                    commissionBalance = body.newBalance ?: 0.0
+                )
+                // Recharger les stats
+                loadStats()
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    isWithdrawing = false,
+                    error = response.body()?.error ?: "Erreur lors du retrait"
+                )
             }
         }
     }

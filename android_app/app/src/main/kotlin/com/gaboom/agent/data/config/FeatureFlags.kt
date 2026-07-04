@@ -10,8 +10,8 @@ object FeatureFlags {
     const val QUEUE_ENGINE = true
     const val LOTTERY_CLOCK = true
     const val SQLCIPHER = true
-    const val GO_GATEWAY = true
-    const val RUST_SIGNATURE = true
+    const val GO_GATEWAY = false
+    const val RUST_SIGNATURE = false
     const val DELTA_SYNC = true
     const val PRIORITY_QUEUE = true
     const val ANTI_REPLAY = true
@@ -27,7 +27,7 @@ object FeatureFlags {
     const val BATCH_SYNC_ENABLED = true
     const val CONFLICT_ENGINE_ENABLED = true
     const val ADAPTIVE_QUEUE_ENABLED = true
-    const val RUST_SYNC_VALIDATION_ENABLED = true
+    const val RUST_SYNC_VALIDATION_ENABLED = false
     const val KEY_ROTATION_ENABLED = true
     const val RUST_SECURITY_HARDENING_ENABLED = true
     const val DEVICE_INTEGRITY_CHECK_ENABLED = true

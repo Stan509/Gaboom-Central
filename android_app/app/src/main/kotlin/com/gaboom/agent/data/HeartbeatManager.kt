@@ -87,42 +87,48 @@ class HeartbeatManager @Inject constructor(
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return
         }
-        try {
-            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
-            var registered = false
-            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.GPS_PROVIDER,
-                    10_000L,
-                    10f,
-                    locationListener
-                )
-                registered = true
+        scope.launch(Dispatchers.Main) {
+            try {
+                val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return@launch
+                var registered = false
+                if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                    locationManager.requestLocationUpdates(
+                        LocationManager.GPS_PROVIDER,
+                        10_000L,
+                        10f,
+                        locationListener,
+                        android.os.Looper.getMainLooper()
+                    )
+                    registered = true
+                }
+                if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                    locationManager.requestLocationUpdates(
+                        LocationManager.NETWORK_PROVIDER,
+                        10_000L,
+                        10f,
+                        locationListener,
+                        android.os.Looper.getMainLooper()
+                    )
+                    registered = true
+                }
+                isLocationListenerRegistered = registered
+            } catch (e: SecurityException) {
+                // Ignore
+            } catch (e: Exception) {
+                android.util.Log.e("HeartbeatManager", "Error registering location listener: ${e.message}", e)
             }
-            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                locationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER,
-                    10_000L,
-                    10f,
-                    locationListener
-                )
-                registered = true
-            }
-            isLocationListenerRegistered = registered
-        } catch (e: SecurityException) {
-            // Ignore
-        } catch (e: Exception) {
-            // Ignore
         }
     }
 
     private fun unregisterLocationListener() {
-        try {
-            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
-            locationManager.removeUpdates(locationListener)
-            isLocationListenerRegistered = false
-        } catch (e: Exception) {
-            // Ignore
+        scope.launch(Dispatchers.Main) {
+            try {
+                val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return@launch
+                locationManager.removeUpdates(locationListener)
+                isLocationListenerRegistered = false
+            } catch (e: Exception) {
+                // Ignore
+            }
         }
     }
 

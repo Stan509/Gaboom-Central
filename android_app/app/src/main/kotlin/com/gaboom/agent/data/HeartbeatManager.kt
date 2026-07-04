@@ -22,6 +22,7 @@ import javax.inject.Singleton
 @Singleton
 class HeartbeatManager @Inject constructor(
     private val apiService: AgentApiService,
+    private val locationSyncManager: com.gaboom.agent.data.sync.LocationSyncManager,
     @ApplicationContext private val context: Context
 ) {
     private var heartbeatJob: Job? = null
@@ -60,11 +61,11 @@ class HeartbeatManager @Inject constructor(
                 }
                 try {
                     val loc = lastLocation ?: getLastKnownLocation()
-                    val req = HeartbeatRequest(
-                        latitude = loc?.latitude,
-                        longitude = loc?.longitude
-                    )
-                    apiService.heartbeat(req)
+                    if (loc != null) {
+                        locationSyncManager.queueLocation(loc.latitude, loc.longitude)
+                    } else {
+                        apiService.heartbeat(HeartbeatRequest(null, null))
+                    }
                 } catch (e: Exception) {
                     // Silently ignore heartbeat errors
                 }

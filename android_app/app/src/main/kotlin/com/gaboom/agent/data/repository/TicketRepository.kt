@@ -4,22 +4,28 @@ import com.gaboom.agent.data.api.AgentApiService
 import com.gaboom.agent.data.local.PendingTicketDao
 import com.gaboom.agent.data.local.PendingTicketEntity
 import com.gaboom.agent.data.local.SyncStatus
+import com.gaboom.agent.data.local.LocalTicketCacheDao
+import com.gaboom.agent.data.local.LocalTicketCache
 import com.gaboom.agent.data.model.*
 import com.gaboom.agent.data.config.AgentConfigDataStore
 import com.gaboom.agent.data.sync.OfflineCoordinator
+import com.gaboom.agent.data.sync.SyncManager
 import com.gaboom.agent.util.HmacUtil
 import com.google.gson.Gson
 import retrofit2.Response
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 @Singleton
 class TicketRepository @Inject constructor(
     private val apiService: AgentApiService,
     private val pendingTicketDao: PendingTicketDao,
+    private val localTicketCacheDao: LocalTicketCacheDao,
     private val agentConfigDataStore: AgentConfigDataStore,
     private val offlineCoordinator: OfflineCoordinator,
+    private val syncManagerProvider: Provider<SyncManager>,
     private val gson: Gson
 ) {
     suspend fun createTicket(
@@ -29,13 +35,45 @@ class TicketRepository @Inject constructor(
     ): Response<TicketCreateResponse> {
         return offlineCoordinator.execute(
             networkCall = {
-                apiService.createTicket(request)
+                val response = apiService.createTicket(request)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val created = response.body()?.ticket
+                    if (created != null) {
+                        localTicketCacheDao.insert(
+                            LocalTicketCache(
+                                ticketUuid = created.id,
+                                tirageId = tirageId,
+                                sessionKey = "",
+                                ticketNo = created.numero,
+                                totalMise = created.totalMise,
+                                createdAt = System.currentTimeMillis(),
+                                rawJson = gson.toJson(created)
+                            )
+                        )
+                    }
+                }
+                response
             },
             offlineFallback = {
                 val localId = UUID.randomUUID().toString()
                 val localTicketNo = "HL-${localId.take(8).uppercase()}"
                 
-                val payloadJson = gson.toJson(request)
+                // Convert to MultiTicketCreateRequest for consistent offline payload
+                val multiRequest = MultiTicketCreateRequest(
+                    tirageIds = listOf(tirageId),
+                    entries = apiLines.map { line ->
+                        MultiTicketEntry(
+                            game = line.jeu,
+                            number = line.valeur,
+                            stake = line.mise,
+                            gratuit = line.gratuit,
+                            option = line.option
+                        )
+                    },
+                    sessionKey = ""
+                )
+                
+                val payloadJson = gson.toJson(multiRequest)
                 val linesSummary = apiLines.take(5).joinToString(", ") { "${it.jeu}:${it.valeur}" } + 
                                    if (apiLines.size > 5) "..." else ""
                 
@@ -56,7 +94,7 @@ class TicketRepository @Inject constructor(
                     sessionKey = "",
                     totalMise = apiLines.sumOf { it.mise },
                     linesSummary = linesSummary,
-                    syncStatus = SyncStatus.PENDING,
+                    syncStatus = SyncStatus.LOCAL_PENDING,
                     hmacSignature = hmacSignature
                 )
                 pendingTicketDao.insert(pendingTicket)
@@ -72,20 +110,38 @@ class TicketRepository @Inject constructor(
                     )
                 }
 
+                val ticketInfo = TicketInfo(
+                    id = localId,
+                    numero = localTicketNo,
+                    groupId = null,
+                    totalMise = apiLines.sumOf { it.mise },
+                    totalGain = 0.0,
+                    statut = "LOCAL_PENDING",
+                    createdAt = java.time.LocalDateTime.now().toString(),
+                    closedAt = null,
+                    tirages = listOf("Tirage"),
+                    lines = ticketLines
+                )
+
+                // Store immediately to local read cache
+                localTicketCacheDao.insert(
+                    LocalTicketCache(
+                        ticketUuid = localId,
+                        tirageId = tirageId,
+                        sessionKey = "",
+                        ticketNo = localTicketNo,
+                        totalMise = apiLines.sumOf { it.mise },
+                        createdAt = System.currentTimeMillis(),
+                        rawJson = gson.toJson(ticketInfo)
+                    )
+                )
+
+                // Trigger synchronization in background immediately
+                syncManagerProvider.get().syncPendingTickets()
+
                 TicketCreateResponse(
                     success = true,
-                    ticket = TicketInfo(
-                        id = localId,
-                        numero = localTicketNo,
-                        groupId = null,
-                        totalMise = apiLines.sumOf { it.mise },
-                        totalGain = 0.0,
-                        statut = "VALIDATION_PENDING",
-                        createdAt = java.time.LocalDateTime.now().toString(),
-                        closedAt = null,
-                        tirages = listOf("Tirage"),
-                        lines = ticketLines
-                    ),
+                    ticket = ticketInfo,
                     error = null
                 )
             }
@@ -97,7 +153,25 @@ class TicketRepository @Inject constructor(
     ): Response<MultiTicketCreateResponse> {
         return offlineCoordinator.execute(
             networkCall = {
-                apiService.createMultiTicket(request)
+                val response = apiService.createMultiTicket(request)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val body = response.body()!!
+                    val tickets = body.tickets ?: emptyList()
+                    tickets.forEach { ticket ->
+                        localTicketCacheDao.insert(
+                            LocalTicketCache(
+                                ticketUuid = ticket.ticketId,
+                                tirageId = ticket.tirageId,
+                                sessionKey = request.sessionKey ?: "",
+                                ticketNo = ticket.ticketNo,
+                                totalMise = ticket.totalMise,
+                                createdAt = System.currentTimeMillis(),
+                                rawJson = gson.toJson(ticket)
+                            )
+                        )
+                    }
+                }
+                response
             },
             offlineFallback = {
                 val groupId = UUID.randomUUID().toString()
@@ -126,13 +200,13 @@ class TicketRepository @Inject constructor(
                         sessionKey = request.sessionKey,
                         totalMise = request.entries.sumOf { it.stake },
                         linesSummary = linesSummary,
-                        syncStatus = SyncStatus.PENDING,
+                        syncStatus = SyncStatus.LOCAL_PENDING,
                         hmacSignature = hmacSignature,
                         batchId = groupId
                     )
                     pendingTicketDao.insert(pendingTicket)
 
-                    MultiTicketInfo(
+                    val multiTicket = MultiTicketInfo(
                         tirageId = tirageId,
                         tirageNom = "Tirage",
                         ticketId = localId,
@@ -141,7 +215,25 @@ class TicketRepository @Inject constructor(
                         totalMise = request.entries.sumOf { it.stake },
                         lines = null
                     )
+
+                    // Save to local read cache
+                    localTicketCacheDao.insert(
+                        LocalTicketCache(
+                            ticketUuid = localId,
+                            tirageId = tirageId,
+                            sessionKey = request.sessionKey ?: "",
+                            ticketNo = localTicketNo,
+                            totalMise = request.entries.sumOf { it.stake },
+                            createdAt = System.currentTimeMillis(),
+                            rawJson = gson.toJson(multiTicket)
+                        )
+                    )
+
+                    multiTicket
                 }
+
+                // Trigger synchronization in background immediately
+                syncManagerProvider.get().syncPendingTickets()
 
                 MultiTicketCreateResponse(
                     success = true,
@@ -156,12 +248,64 @@ class TicketRepository @Inject constructor(
 
     suspend fun listTickets(limit: Int, offset: Int): Response<TicketListResponse> {
         return offlineCoordinator.execute(
-            networkCall = { apiService.listTickets(limit = limit, offset = offset) },
+            networkCall = {
+                val response = apiService.listTickets(limit = limit, offset = offset)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val tickets = response.body()?.tickets ?: emptyList()
+                    val caches = tickets.map { ticket ->
+                        LocalTicketCache(
+                            ticketUuid = ticket.id,
+                            tirageId = ticket.tirageId ?: 0,
+                            sessionKey = "",
+                            ticketNo = ticket.numero,
+                            totalMise = ticket.totalMise,
+                            createdAt = try {
+                                java.time.OffsetDateTime.parse(ticket.createdAt).toInstant().toEpochMilli()
+                            } catch (e: Exception) {
+                                System.currentTimeMillis()
+                            },
+                            rawJson = gson.toJson(ticket)
+                        )
+                    }
+                    localTicketCacheDao.insertAll(caches)
+                }
+                response
+            },
             offlineFallback = {
+                val cached = localTicketCacheDao.getAllTickets()
+                val listItems = cached.mapNotNull { cache ->
+                    if (cache.rawJson != null) {
+                        try {
+                            gson.fromJson(cache.rawJson, TicketListItem::class.java)
+                        } catch (e: Exception) {
+                            val info = gson.fromJson(cache.rawJson, TicketInfo::class.java)
+                            TicketListItem(
+                                id = info.id,
+                                numero = info.numero,
+                                groupId = info.groupId,
+                                tirageId = cache.tirageId,
+                                tirageNom = "Tirage",
+                                tirageOpen = true,
+                                status = info.statut,
+                                numBets = info.lines?.size ?: 0,
+                                totalMise = info.totalMise,
+                                totalGainDu = info.totalGain ?: 0.0,
+                                totalGainPaye = 0.0,
+                                isWinner = (info.totalGain ?: 0.0) > 0.0,
+                                isPaid = info.statut.lowercase() == "paid",
+                                canPay = false,
+                                canVoid = false,
+                                canReprint = true,
+                                createdAt = info.createdAt,
+                                ageMinutes = 0.0
+                            )
+                        }
+                    } else null
+                }
                 TicketListResponse(
                     success = true,
-                    tickets = emptyList(),
-                    total = 0,
+                    tickets = listItems,
+                    total = listItems.size,
                     limit = limit,
                     offset = offset,
                     error = null
@@ -172,11 +316,61 @@ class TicketRepository @Inject constructor(
 
     suspend fun searchTickets(query: String): Response<TicketSearchResponse> {
         return offlineCoordinator.execute(
-            networkCall = { apiService.searchTickets(query) },
+            networkCall = {
+                val response = apiService.searchTickets(query)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val tickets = response.body()?.tickets ?: emptyList()
+                    val caches = tickets.map { ticket ->
+                        LocalTicketCache(
+                            ticketUuid = ticket.id,
+                            tirageId = 0,
+                            sessionKey = "",
+                            ticketNo = ticket.ticketNo,
+                            totalMise = ticket.totalMise,
+                            createdAt = System.currentTimeMillis(),
+                            rawJson = gson.toJson(ticket)
+                        )
+                    }
+                    localTicketCacheDao.insertAll(caches)
+                }
+                response
+            },
             offlineFallback = {
+                val cached = localTicketCacheDao.getAllTickets()
+                val queryLower = query.lowercase()
+                val listItems = cached.mapNotNull { cache ->
+                    if (cache.rawJson != null) {
+                        try {
+                            gson.fromJson(cache.rawJson, TicketListItem::class.java)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } else null
+                }.filter {
+                    it.numero.lowercase().contains(queryLower) || it.id.lowercase().contains(queryLower)
+                }
+                
+                val results = listItems.map { item ->
+                    TicketSearchResult(
+                        id = item.id,
+                        ticketNo = item.numero,
+                        tirageNom = item.tirageNom,
+                        tirageId = item.tirageId ?: 0,
+                        totalMise = item.totalMise,
+                        totalGainDu = item.totalGainDu,
+                        isWinner = item.isWinner,
+                        isPaid = item.isPaid,
+                        statut = item.status,
+                        createdAt = item.createdAt,
+                        canVoid = item.canVoid,
+                        voidDeadline = null,
+                        lines = emptyList()
+                    )
+                }
+                
                 TicketSearchResponse(
                     success = true,
-                    tickets = emptyList(),
+                    tickets = results,
                     error = null
                 )
             }
@@ -245,11 +439,43 @@ class TicketRepository @Inject constructor(
         return offlineCoordinator.execute(
             networkCall = { apiService.searchTicketsByGroup(groupId) },
             offlineFallback = {
+                val cached = localTicketCacheDao.getAllTickets()
+                val listItems = cached.mapNotNull { cache ->
+                    if (cache.rawJson != null) {
+                        try {
+                            gson.fromJson(cache.rawJson, TicketListItem::class.java)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } else null
+                }.filter {
+                    it.groupId == groupId
+                }
+                
+                val groupItems = listItems.map { item ->
+                    TicketGroupItem(
+                        id = item.id,
+                        numero = item.numero,
+                        tirageId = item.tirageId,
+                        tirageNom = item.tirageNom,
+                        status = item.status,
+                        totalMise = item.totalMise,
+                        totalGainDu = item.totalGainDu,
+                        totalGainPaye = item.totalGainPaye,
+                        isWinner = item.isWinner,
+                        isPaid = item.isPaid,
+                        canPay = item.canPay,
+                        canVoid = item.canVoid,
+                        createdAt = item.createdAt,
+                        lines = emptyList()
+                    )
+                }
+                
                 TicketGroupResponse(
                     success = true,
                     groupId = groupId,
-                    tickets = emptyList(),
-                    total = 0,
+                    tickets = groupItems,
+                    total = groupItems.size,
                     error = null
                 )
             }
@@ -258,11 +484,51 @@ class TicketRepository @Inject constructor(
 
     suspend fun getHistorique(): Response<HistoriqueResponse> {
         return offlineCoordinator.execute(
-            networkCall = { apiService.getHistorique() },
+            networkCall = {
+                val response = apiService.getHistorique()
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val tickets = response.body()?.tickets ?: emptyList()
+                    val caches = tickets.map { ticket ->
+                        LocalTicketCache(
+                            ticketUuid = ticket.id,
+                            tirageId = 0,
+                            sessionKey = "",
+                            ticketNo = ticket.numero,
+                            totalMise = ticket.totalMise,
+                            createdAt = System.currentTimeMillis(),
+                            rawJson = gson.toJson(ticket)
+                        )
+                    }
+                    localTicketCacheDao.insertAll(caches)
+                }
+                response
+            },
             offlineFallback = {
+                val cached = localTicketCacheDao.getAllTickets()
+                val listItems = cached.mapNotNull { cache ->
+                    if (cache.rawJson != null) {
+                        try {
+                            gson.fromJson(cache.rawJson, TicketInfo::class.java)
+                        } catch (e: Exception) {
+                            val item = gson.fromJson(cache.rawJson, TicketListItem::class.java)
+                            TicketInfo(
+                                id = item.id,
+                                numero = item.numero,
+                                groupId = item.groupId,
+                                totalMise = item.totalMise,
+                                totalGain = item.totalGainDu,
+                                statut = item.status,
+                                createdAt = item.createdAt,
+                                closedAt = null,
+                                tirages = listOf(item.tirageNom),
+                                lines = emptyList()
+                            )
+                        }
+                    } else null
+                }
                 HistoriqueResponse(
                     success = true,
-                    tickets = emptyList(),
+                    tickets = listItems,
                     error = null
                 )
             }

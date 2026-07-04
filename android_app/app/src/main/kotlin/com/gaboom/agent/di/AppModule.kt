@@ -104,6 +104,11 @@ object AppModule {
         return database.drawCacheDao()
     }
 
+    @Provides
+    fun provideLocationQueueDao(database: AgentDatabase): com.gaboom.agent.data.local.LocationQueueDao {
+        return database.locationQueueDao()
+    }
+
     // ─── Network & Sync ────────────────────────────────────────────────────────
 
     @Provides
@@ -124,9 +129,17 @@ object AppModule {
         pendingTicketDao: PendingTicketDao,
         dynamicRetrofitProvider: DynamicRetrofitProvider,
         networkMonitor: NetworkMonitor,
+        syncPolicy: com.gaboom.agent.policy.SyncPolicy,
         gson: Gson,
         agentConfigDataStore: AgentConfigDataStore
     ): SyncManager {
-        return SyncManager(pendingTicketDao, dynamicRetrofitProvider, networkMonitor, gson, agentConfigDataStore)
+        return SyncManager(
+            pendingTicketDao = pendingTicketDao,
+            dynamicRetrofitProvider = dynamicRetrofitProvider,
+            networkMonitor = networkMonitor,
+            syncPolicy = syncPolicy,
+            gson = gson,
+            agentConfigDataStore = agentConfigDataStore
+        )
     }
 }

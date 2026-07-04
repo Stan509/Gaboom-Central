@@ -24,7 +24,8 @@ data class LocalTicketCache(
     @ColumnInfo(name = "session_key") val sessionKey: String,
     @ColumnInfo(name = "ticket_no") val ticketNo: String,
     @ColumnInfo(name = "total_mise") val totalMise: Double,
-    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis()
+    @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(name = "raw_json") val rawJson: String? = null
 )
 
 @Entity(tableName = "tirage_session_cache")
@@ -38,11 +39,14 @@ data class TirageSessionCache(
  * Sync status for offline tickets
  */
 enum class SyncStatus {
-    PENDING,    // Waiting to sync
-    SYNCING,    // Currently being synced
-    SYNCED,     // Successfully synced
-    FAILED,     // Sync failed (conflict or error)
-    VALIDATION_PENDING // Sent to gateway/server, awaiting final validation
+    LOCAL_PENDING,       // Waiting to sync
+    PRINTED,             // Printed locally
+    SYNCING,             // Currently being synced
+    SYNCED,              // Successfully synced
+    FAILED,              // Sync failed (conflict or error)
+    CONFLICT,            // Sync rejected due to conflict
+    PENDING,             // Alias/legacy for LOCAL_PENDING
+    VALIDATION_PENDING   // Legacy validation pending
 }
 
 @Entity(tableName = "offline_sessions")
@@ -148,6 +152,12 @@ interface LocalTicketCacheDao {
     
     @Query("SELECT * FROM local_ticket_cache WHERE tirage_id = :tirageId AND session_key = :sessionKey ORDER BY created_at DESC")
     fun getTicketsForTirageSession(tirageId: Int, sessionKey: String): Flow<List<LocalTicketCache>>
+
+    @Query("SELECT * FROM local_ticket_cache ORDER BY created_at DESC")
+    suspend fun getAllTickets(): List<LocalTicketCache>
+
+    @Query("SELECT * FROM local_ticket_cache ORDER BY created_at DESC")
+    fun getAllTicketsFlow(): Flow<List<LocalTicketCache>>
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(ticket: LocalTicketCache)
@@ -194,10 +204,10 @@ interface PendingTicketDao {
     @Query("SELECT * FROM pending_tickets WHERE sync_status = :status ORDER BY created_at ASC")
     suspend fun getByStatus(status: SyncStatus): List<PendingTicketEntity>
     
-    @Query("SELECT * FROM pending_tickets WHERE sync_status IN ('PENDING', 'FAILED') ORDER BY created_at ASC")
+    @Query("SELECT * FROM pending_tickets WHERE sync_status IN ('LOCAL_PENDING', 'PENDING', 'FAILED', 'PRINTED') ORDER BY created_at ASC")
     suspend fun getPendingAndFailed(): List<PendingTicketEntity>
     
-    @Query("SELECT * FROM pending_tickets WHERE sync_status = 'PENDING' ORDER BY created_at ASC")
+    @Query("SELECT * FROM pending_tickets WHERE sync_status IN ('LOCAL_PENDING', 'PENDING', 'PRINTED') ORDER BY created_at ASC")
     suspend fun getPending(): List<PendingTicketEntity>
     
     @Query("SELECT * FROM pending_tickets WHERE sync_status = 'FAILED' ORDER BY created_at ASC")
@@ -212,10 +222,10 @@ interface PendingTicketDao {
     @Query("SELECT * FROM pending_tickets ORDER BY created_at DESC")
     fun getAllFlow(): Flow<List<PendingTicketEntity>>
     
-    @Query("SELECT COUNT(*) FROM pending_tickets WHERE sync_status IN ('PENDING', 'FAILED')")
+    @Query("SELECT COUNT(*) FROM pending_tickets WHERE sync_status IN ('LOCAL_PENDING', 'PENDING', 'FAILED', 'PRINTED')")
     fun getPendingCountFlow(): Flow<Int>
     
-    @Query("SELECT COUNT(*) FROM pending_tickets WHERE sync_status = 'PENDING'")
+    @Query("SELECT COUNT(*) FROM pending_tickets WHERE sync_status IN ('LOCAL_PENDING', 'PENDING', 'PRINTED')")
     suspend fun getPendingCount(): Int
     
     @Query("SELECT * FROM pending_tickets WHERE batch_id = :batchId ORDER BY created_at ASC")
@@ -275,9 +285,10 @@ interface PendingTicketDao {
         IntegrityEventEntity::class,
         DeviceIdentityEntity::class,
         ClockHistoryEntity::class,
-        DrawCacheEntity::class
+        DrawCacheEntity::class,
+        LocationQueueEntity::class
     ],
-    version = 6,  // Bumped for Phase 2C draw_cache
+    version = 8,  // Bumped for Phase 2C LocalTicketCache rawJson
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -294,6 +305,7 @@ abstract class AgentDatabase : RoomDatabase() {
     abstract fun integrityEventDao(): IntegrityEventDao
     abstract fun deviceIdentityDao(): DeviceIdentityDao
     abstract fun drawCacheDao(): DrawCacheDao
+    abstract fun locationQueueDao(): LocationQueueDao
 }
 
 /**

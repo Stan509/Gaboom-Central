@@ -8,6 +8,7 @@ import com.gaboom.agent.data.local.PendingTicketEntity
 import com.gaboom.agent.data.local.SyncStatus
 import com.gaboom.agent.data.model.MultiTicketCreateRequest
 import com.gaboom.agent.data.model.MultiTicketEntry
+import com.gaboom.agent.data.model.MultiTicketOverride
 import com.gaboom.agent.data.model.FailedTirageInfo
 import com.gaboom.agent.data.network.NetworkMonitor
 import com.gaboom.agent.data.config.AgentConfigDataStore
@@ -15,6 +16,7 @@ import com.gaboom.agent.data.config.DeviceCredentials
 import com.gaboom.agent.util.HmacUtil
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import java.util.UUID
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
@@ -65,6 +67,7 @@ class SyncManager @Inject constructor(
     private val pendingTicketDao: PendingTicketDao,
     private val dynamicRetrofitProvider: DynamicRetrofitProvider,
     private val networkMonitor: NetworkMonitor,
+    private val syncPolicy: com.gaboom.agent.policy.SyncPolicy,
     private val gson: Gson,
     private val agentConfigDataStore: AgentConfigDataStore
 ) {
@@ -77,6 +80,9 @@ class SyncManager @Inject constructor(
     val syncEvents: SharedFlow<SyncEvent> = _syncEvents.asSharedFlow()
     
     private var syncJob: Job? = null
+    
+    // Adaptive batch size controls
+    private var currentAdaptiveBatchSize = 50
     
     // Backoff configuration
     private val initialBackoffMs = 5_000L      // 5 seconds
@@ -99,8 +105,8 @@ class SyncManager @Inject constructor(
         // Update pending counts
         scope.launch {
             pendingTicketDao.getAllFlow().collect { tickets ->
-                val pending = tickets.count { it.syncStatus == SyncStatus.PENDING }
-                val failed = tickets.count { it.syncStatus == SyncStatus.FAILED }
+                val pending = tickets.count { it.syncStatus == SyncStatus.LOCAL_PENDING || it.syncStatus == SyncStatus.PENDING || it.syncStatus == SyncStatus.PRINTED }
+                val failed = tickets.count { it.syncStatus == SyncStatus.FAILED || it.syncStatus == SyncStatus.CONFLICT }
                 _syncState.update { it.copy(pendingCount = pending, failedCount = failed) }
             }
         }
@@ -108,7 +114,6 @@ class SyncManager @Inject constructor(
     
     /**
      * Sync all pending tickets grouped by batch.
-     * Phase I-A2: Batches tickets with same batchId and syncs them together.
      */
     fun syncPendingTickets() {
         if (syncJob?.isActive == true) {
@@ -125,31 +130,60 @@ class SyncManager @Inject constructor(
             _syncState.update { it.copy(isSyncing = true) }
             
             try {
-                // Get all pending tickets
                 val pendingTickets = pendingTicketDao.getPending()
+                val queueSize = pendingTickets.size
+                if (queueSize == 0) {
+                    _syncState.update { it.copy(lastSyncTime = System.currentTimeMillis(), lastError = null) }
+                    return@launch
+                }
                 
-                // Group by batchId
-                val batches = groupTicketsByBatch(pendingTickets)
-                Log.d(TAG, "Syncing ${pendingTickets.size} tickets in ${batches.size} batches")
+                val batchSize = when {
+                    queueSize < 100 -> queueSize
+                    queueSize in 100..1000 -> syncPolicy.smallBatchSize
+                    else -> currentAdaptiveBatchSize
+                }
                 
-                // Process each batch
+                Log.d(TAG, "Syncing $queueSize pending tickets in batches of size $batchSize (adaptive: $currentAdaptiveBatchSize)")
+                val batches = chunkPendingTicketsIntoBatches(pendingTickets, batchSize)
+                
                 for (batch in batches) {
                     if (!networkMonitor.isCurrentlyOnline()) {
                         Log.d(TAG, "Lost connection during sync, stopping")
                         break
                     }
                     
-                    syncBatch(batch)
+                    val startTime = System.currentTimeMillis()
+                    val result = syncBatch(batch)
+                    val duration = System.currentTimeMillis() - startTime
+                    
+                    if (queueSize > 1000 && result is BatchSyncResult.Success) {
+                        if (duration < 1500L) {
+                            currentAdaptiveBatchSize = when (currentAdaptiveBatchSize) {
+                                50 -> 100
+                                100 -> 250
+                                250 -> 500
+                                else -> 500
+                            }
+                            Log.d(TAG, "Server responded quickly (${duration}ms). Increased adaptive batch size to $currentAdaptiveBatchSize")
+                        } else if (duration > 4000L) {
+                            currentAdaptiveBatchSize = when (currentAdaptiveBatchSize) {
+                                500 -> 250
+                                250 -> 100
+                                100 -> 50
+                                else -> 50
+                            }
+                            Log.w(TAG, "Server response slow (${duration}ms). Decreased adaptive batch size to $currentAdaptiveBatchSize")
+                        }
+                    }
                 }
                 
-                // Also retry failed tickets that haven't exceeded max retries
-                val failedTickets = pendingTicketDao.getFailed()
-                    .filter { shouldRetry(it) }
-                
-                val failedBatches = groupTicketsByBatch(failedTickets)
-                for (batch in failedBatches) {
-                    if (!networkMonitor.isCurrentlyOnline()) break
-                    syncBatch(batch)
+                val failedTickets = pendingTicketDao.getFailed().filter { shouldRetry(it) }
+                if (failedTickets.isNotEmpty()) {
+                    val failedBatches = chunkPendingTicketsIntoBatches(failedTickets, batchSize)
+                    for (batch in failedBatches) {
+                        if (!networkMonitor.isCurrentlyOnline()) break
+                        syncBatch(batch)
+                    }
                 }
                 
                 _syncState.update { it.copy(lastSyncTime = System.currentTimeMillis(), lastError = null) }
@@ -163,29 +197,50 @@ class SyncManager @Inject constructor(
         }
     }
     
-    /**
-     * Group tickets by batchId. Tickets without batchId are treated as individual batches.
-     */
+    private fun chunkPendingTicketsIntoBatches(tickets: List<PendingTicketEntity>, batchSize: Int): List<TicketBatch> {
+        val result = mutableListOf<TicketBatch>()
+        val userBatches = tickets.filter { it.batchId != null }.groupBy { it.batchId!! }
+        userBatches.forEach { (batchId, list) ->
+            val label = list.firstOrNull()?.batchLabel ?: "Multi-ticket"
+            result.add(TicketBatch(batchId, label, list))
+        }
+        
+        val individualTickets = tickets.filter { it.batchId == null }
+        if (individualTickets.isNotEmpty()) {
+            val groupedByTirage = individualTickets.groupBy { it.tirageId ?: 0 }
+            var hasMore = true
+            val iterators = groupedByTirage.map { it.value.iterator() }
+            
+            while (hasMore) {
+                val currentChunk = mutableListOf<PendingTicketEntity>()
+                hasMore = false
+                for (it in iterators) {
+                    if (it.hasNext()) {
+                        currentChunk.add(it.next())
+                        hasMore = true
+                    }
+                }
+                if (currentChunk.isNotEmpty()) {
+                    currentChunk.chunked(batchSize).forEach { subChunk ->
+                        val combinedBatchId = "combined_" + UUID.randomUUID().toString().take(8)
+                        result.add(TicketBatch(combinedBatchId, "Lot adaptif", subChunk))
+                    }
+                }
+            }
+        }
+        return result
+    }
+    
     private fun groupTicketsByBatch(tickets: List<PendingTicketEntity>): List<TicketBatch> {
         val grouped = tickets.groupBy { it.batchId ?: "single_${it.id}" }
-        
         return grouped.map { (batchId, ticketList) ->
             val label = ticketList.firstOrNull()?.batchLabel ?: "Ticket unique"
-            TicketBatch(
-                batchId = batchId,
-                batchLabel = label,
-                tickets = ticketList
-            )
+            TicketBatch(batchId = batchId, batchLabel = label, tickets = ticketList)
         }
     }
     
-    /**
-     * Sync a batch of tickets (single or multi) via create-multi endpoint.
-     */
-    private suspend fun syncBatch(batch: TicketBatch) {
+    private suspend fun syncBatch(batch: TicketBatch): BatchSyncResult {
         Log.d(TAG, "Syncing batch ${batch.batchId} with ${batch.totalTickets} tickets")
-        
-        // Get device credentials for HMAC signing
         val deviceCreds = agentConfigDataStore.getDeviceCredentials()
         if (deviceCreds == null) {
             Log.e(TAG, "No device credentials, cannot sync offline tickets")
@@ -201,85 +256,88 @@ class SyncManager @Inject constructor(
                     isRetryable = false
                 ))
             }
-            return
+            return BatchSyncResult.Failure(batch.batchId, "No device credentials")
         }
         
-        // Mark all tickets in batch as syncing
         batch.tickets.forEach { pendingTicketDao.markSyncing(it.id) }
         
         try {
-            // Refresh API service in case base URL changed
             dynamicRetrofitProvider.refreshIfNeeded()
             val apiService = dynamicRetrofitProvider.getApiService()
             
-            // Build create-multi request from all tickets in batch
             val firstTicket = batch.tickets.first()
             val request = buildCreateMultiRequest(batch)
-            
-            // Re-serialize for consistent HMAC calculation
             val payloadJson = gson.toJson(request)
             
-            // Calculate HMAC signature using first ticket's session key
             val signature = HmacUtil.signPayload(
                 deviceSecret = deviceCreds.deviceSecret,
                 payloadJson = payloadJson,
                 sessionKey = firstTicket.sessionKey ?: ""
             )
             
-            // Make API call with HMAC headers
             val response = apiService.createMultiTicketWithHeaders(
                 request = request,
                 deviceId = deviceCreds.deviceId,
                 payloadSign = signature
             )
             
-            if (response.isSuccessful && response.body()?.success == true) {
+            return if (response.isSuccessful && response.body()?.success == true) {
                 val body = response.body()!!
                 handleSyncSuccess(batch, body, deviceCreds)
+                BatchSyncResult.Success(batch.batchId)
             } else {
-                handleSyncError(batch, response.code(), response.errorBody()?.string(), deviceCreds)
+                val errorMsg = response.errorBody()?.string() ?: "HTTP ${response.code()}"
+                handleSyncError(batch, response.code(), errorMsg, deviceCreds)
+                BatchSyncResult.Failure(batch.batchId, errorMsg)
             }
-            
         } catch (e: Exception) {
             Log.e(TAG, "Batch ${batch.batchId} sync exception", e)
-            
             batch.tickets.forEach { ticket ->
                 pendingTicketDao.updateSyncFailed(
                     id = ticket.id,
                     status = SyncStatus.FAILED,
-                    error = e.message ?: "Erreur rseau"
+                    error = e.message ?: "Erreur reseau"
                 )
                 _syncEvents.emit(SyncEvent.TicketFailed(
                     localId = ticket.id,
-                    error = e.message ?: "Erreur rseau",
+                    error = e.message ?: "Erreur reseau",
                     isRetryable = true
                 ))
             }
+            return BatchSyncResult.Failure(batch.batchId, e.message ?: "Network error")
         }
     }
     
-    /**
-     * Build MultiTicketCreateRequest from a batch of tickets.
-     */
     private fun buildCreateMultiRequest(batch: TicketBatch): MultiTicketCreateRequest {
         val firstTicket = batch.tickets.first()
-        
-        // Parse the stored payload to get entries
-        val storedRequest = gson.fromJson(firstTicket.payloadJson, MultiTicketCreateRequest::class.java)
-        
-        // Collect all unique tirage_ids from all tickets in batch
-        val allTirageIds = batch.tickets.mapNotNull { it.tirageId }.distinct()
-        
-        return MultiTicketCreateRequest(
-            tirageIds = allTirageIds,
-            entries = storedRequest.entries,
-            sessionKey = firstTicket.sessionKey
-        )
+        if (batch.batchId.startsWith("combined_")) {
+            val allTirageIds = batch.tickets.mapNotNull { it.tirageId }.distinct()
+            val overrides = mutableMapOf<String, MultiTicketOverride>()
+            batch.tickets.forEach { ticket ->
+                val ticketReq = gson.fromJson(ticket.payloadJson, MultiTicketCreateRequest::class.java)
+                val tid = ticket.tirageId
+                if (tid != null) {
+                    overrides[tid.toString()] = MultiTicketOverride(entries = ticketReq.entries)
+                }
+            }
+            return MultiTicketCreateRequest(
+                tirageIds = allTirageIds,
+                entries = emptyList(),
+                overrides = overrides,
+                sessionKey = firstTicket.sessionKey
+            )
+        } else {
+            val storedRequest = gson.fromJson(firstTicket.payloadJson, MultiTicketCreateRequest::class.java)
+            val allTirageIds = batch.tickets.mapNotNull { it.tirageId }.distinct()
+            return MultiTicketCreateRequest(
+                tirageIds = allTirageIds,
+                entries = storedRequest.entries,
+                overrides = storedRequest.overrides,
+                sessionKey = firstTicket.sessionKey
+            )
+        }
     }
     
-    /**
-     * Handle successful sync response - match returned tickets with local pending tickets.
-     */
     private suspend fun handleSyncSuccess(
         batch: TicketBatch,
         body: com.gaboom.agent.data.model.MultiTicketCreateResponse,
@@ -287,11 +345,8 @@ class SyncManager @Inject constructor(
     ) {
         val createdTickets = body.tickets ?: emptyList()
         val failedTirages = body.failed ?: emptyList()
-        
-        // Map tirage_id to local ticket
         val tirageToLocalTicket = batch.tickets.associateBy { it.tirageId }
         
-        // Process successful tickets
         var successCount = 0
         createdTickets.forEach { createdTicket ->
             val localTicket = tirageToLocalTicket[createdTicket.tirageId]
@@ -310,15 +365,16 @@ class SyncManager @Inject constructor(
             }
         }
         
-        // Process failed tirages
         var failedCount = 0
-        failedTirages.forEach { failed: FailedTirageInfo ->
+        failedTirages.forEach { failed ->
             val localTicket = tirageToLocalTicket[failed.tirageId]
             if (localTicket != null) {
-                val isRetryable = isRetryableError(0, failed.error)
+                val isConflict = failed.error.lowercase().contains("conflict") || failed.error.lowercase().contains("déjà") || failed.error.lowercase().contains("deja")
+                val targetStatus = if (isConflict) SyncStatus.CONFLICT else SyncStatus.FAILED
+                val isRetryable = if (isConflict) false else isRetryableError(0, failed.error)
                 pendingTicketDao.updateSyncFailed(
                     id = localTicket.id,
-                    status = SyncStatus.FAILED,
+                    status = targetStatus,
                     error = failed.error
                 )
                 _syncEvents.emit(SyncEvent.TicketFailed(
@@ -331,7 +387,6 @@ class SyncManager @Inject constructor(
             }
         }
         
-        // Emit batch event
         if (failedCount > 0 && successCount > 0) {
             _syncEvents.emit(SyncEvent.BatchPartial(
                 batchId = batch.batchId,
@@ -341,16 +396,13 @@ class SyncManager @Inject constructor(
         } else if (failedCount > 0) {
             _syncEvents.emit(SyncEvent.BatchFailed(
                 batchId = batch.batchId,
-                error = "$failedCount ticket(s) chou(s)"
+                error = "$failedCount ticket(s) échoué(s)"
             ))
         } else {
             _syncEvents.emit(SyncEvent.BatchSuccess(batchId = batch.batchId))
         }
     }
     
-    /**
-     * Handle sync error response.
-     */
     private suspend fun handleSyncError(
         batch: TicketBatch,
         httpCode: Int,
@@ -358,34 +410,34 @@ class SyncManager @Inject constructor(
         deviceCreds: DeviceCredentials
     ) {
         val errorMsg = errorBody ?: "HTTP $httpCode"
-        
-        // 403 = HMAC verification failed (tampering detected) - non-retryable for all
         if (httpCode == 403) {
             batch.tickets.forEach { ticket ->
                 pendingTicketDao.updateSyncFailed(
                     id = ticket.id,
                     status = SyncStatus.FAILED,
-                    error = "Scurit: donnes modifies. Contact admin."
+                    error = "Sécurité: données modifiées. Contact admin."
                 )
                 _syncEvents.emit(SyncEvent.TicketFailed(
                     localId = ticket.id,
-                    error = "Scurit: donnes modifies. Contact admin.",
+                    error = "Sécurité: données modifiées. Contact admin.",
                     isRetryable = false
                 ))
             }
             _syncEvents.emit(SyncEvent.BatchFailed(
                 batchId = batch.batchId,
-                error = "Scurit: donnes modifies"
+                error = "Sécurité: données modifiées"
             ))
             return
         }
         
-        val isRetryable = isRetryableError(httpCode, errorMsg)
+        val isConflict = errorMsg.lowercase().contains("conflict") || errorMsg.lowercase().contains("déjà") || errorMsg.lowercase().contains("deja")
+        val targetStatus = if (isConflict) SyncStatus.CONFLICT else SyncStatus.FAILED
+        val isRetryable = if (isConflict) false else isRetryableError(httpCode, errorMsg)
         
         batch.tickets.forEach { ticket ->
             pendingTicketDao.updateSyncFailed(
                 id = ticket.id,
-                status = SyncStatus.FAILED,
+                status = targetStatus,
                 error = errorMsg
             )
             _syncEvents.emit(SyncEvent.TicketFailed(

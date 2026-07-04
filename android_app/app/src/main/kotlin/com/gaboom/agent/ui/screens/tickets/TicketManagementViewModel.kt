@@ -162,9 +162,12 @@ class TicketManagementViewModel @Inject constructor(
             tirageNom = tirageNom,
             tirageOpen = true,
             status = when (entity.syncStatus) {
-                com.gaboom.agent.data.local.SyncStatus.PENDING -> "pending"
+                com.gaboom.agent.data.local.SyncStatus.PENDING,
+                com.gaboom.agent.data.local.SyncStatus.LOCAL_PENDING,
+                com.gaboom.agent.data.local.SyncStatus.PRINTED -> "pending"
                 com.gaboom.agent.data.local.SyncStatus.SYNCING -> "pending"
-                com.gaboom.agent.data.local.SyncStatus.FAILED -> "pending"
+                com.gaboom.agent.data.local.SyncStatus.FAILED,
+                com.gaboom.agent.data.local.SyncStatus.CONFLICT -> "pending"
                 com.gaboom.agent.data.local.SyncStatus.SYNCED -> "paid"
                 com.gaboom.agent.data.local.SyncStatus.VALIDATION_PENDING -> "pending"
             },
@@ -175,7 +178,9 @@ class TicketManagementViewModel @Inject constructor(
             isWinner = false,
             isPaid = false,
             canPay = false,
-            canVoid = entity.syncStatus == com.gaboom.agent.data.local.SyncStatus.PENDING,
+            canVoid = entity.syncStatus == com.gaboom.agent.data.local.SyncStatus.PENDING ||
+                    entity.syncStatus == com.gaboom.agent.data.local.SyncStatus.LOCAL_PENDING ||
+                    entity.syncStatus == com.gaboom.agent.data.local.SyncStatus.PRINTED,
             canReprint = true,
             createdAt = createdStr,
             ageMinutes = (System.currentTimeMillis() - entity.createdAt) / 60000.0

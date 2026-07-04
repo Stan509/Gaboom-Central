@@ -60,7 +60,15 @@ data class SyncPolicy(
     /** Maximum back‑off delay. */
     val maxDelayMillis: Long = 300_000,
     /** Maximum number of retry attempts. */
-    val maxRetries: Int = 10
+    val maxRetries: Int = 10,
+    /** Small batch size for queue size in 100..1000. */
+    val smallBatchSize: Int = 20,
+    /** Medium batch size for initial adaptive sync. */
+    val mediumBatchSize: Int = 50,
+    /** Large batch size. */
+    val largeBatchSize: Int = 100,
+    /** Maximum batch size. */
+    val maxBatchSize: Int = 500
 ) : Policy
 
 /**

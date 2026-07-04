@@ -229,18 +229,24 @@ fun PendingTicketCard(
     val dateFormat = remember { SimpleDateFormat("dd/MM HH:mm", Locale.getDefault()) }
     
     val statusColor = when (ticket.syncStatus) {
-        SyncStatus.PENDING -> Color(0xFF3AA0FF)
+        SyncStatus.PENDING,
+        SyncStatus.LOCAL_PENDING,
+        SyncStatus.PRINTED -> Color(0xFF3AA0FF)
         SyncStatus.SYNCING -> Color(0xFFF59E0B)
         SyncStatus.SYNCED -> Color(0xFF10B981)
-        SyncStatus.FAILED -> Color(0xFFEF4444)
+        SyncStatus.FAILED,
+        SyncStatus.CONFLICT -> Color(0xFFEF4444)
         SyncStatus.VALIDATION_PENDING -> Color(0xFFF59E0B)
     }
     
     val statusText = when (ticket.syncStatus) {
-        SyncStatus.PENDING -> "En attente"
+        SyncStatus.PENDING,
+        SyncStatus.LOCAL_PENDING -> "En attente"
+        SyncStatus.PRINTED -> "Imprimé local"
         SyncStatus.SYNCING -> "Synchronisation..."
         SyncStatus.SYNCED -> "Synchronisé"
         SyncStatus.FAILED -> "Échec"
+        SyncStatus.CONFLICT -> "Conflit"
         SyncStatus.VALIDATION_PENDING -> "En attente validation"
     }
 
@@ -592,10 +598,13 @@ fun MiniTicketItem(
     onDelete: () -> Unit
 ) {
     val statusColor = when (ticket.syncStatus) {
-        SyncStatus.PENDING -> Color(0xFF3AA0FF)
+        SyncStatus.PENDING,
+        SyncStatus.LOCAL_PENDING,
+        SyncStatus.PRINTED -> Color(0xFF3AA0FF)
         SyncStatus.SYNCING -> Color(0xFFF59E0B)
         SyncStatus.SYNCED -> Color(0xFF10B981)
-        SyncStatus.FAILED -> Color(0xFFEF4444)
+        SyncStatus.FAILED,
+        SyncStatus.CONFLICT -> Color(0xFFEF4444)
         SyncStatus.VALIDATION_PENDING -> Color(0xFFF59E0B)
     }
     

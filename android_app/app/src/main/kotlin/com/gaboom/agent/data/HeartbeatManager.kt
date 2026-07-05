@@ -21,7 +21,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class HeartbeatManager @Inject constructor(
-    private val apiService: AgentApiService,
+    private val dynamicRetrofitProvider: com.gaboom.agent.data.api.DynamicRetrofitProvider,
     private val locationSyncManager: com.gaboom.agent.data.sync.LocationSyncManager,
     @ApplicationContext private val context: Context
 ) {
@@ -64,7 +64,7 @@ class HeartbeatManager @Inject constructor(
                     if (loc != null) {
                         locationSyncManager.queueLocation(loc.latitude, loc.longitude)
                     } else {
-                        apiService.heartbeat(HeartbeatRequest(null, null))
+                        dynamicRetrofitProvider.getApiService().heartbeat(HeartbeatRequest(null, null))
                     }
                 } catch (e: Exception) {
                     // Silently ignore heartbeat errors

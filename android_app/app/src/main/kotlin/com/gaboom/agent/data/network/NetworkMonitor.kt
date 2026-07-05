@@ -57,8 +57,7 @@ class NetworkMonitor @Inject constructor(
                 networkCapabilities: NetworkCapabilities
             ) {
                 val hasInternet = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                val validated = networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-                val isConnected = hasInternet && validated
+                val isConnected = hasInternet
                 _isOnline.value = isConnected
                 trySend(isConnected)
             }
@@ -85,8 +84,7 @@ class NetworkMonitor @Inject constructor(
         val network = connectivityManager.activeNetwork ?: return false
         val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
         
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-               capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
     
     /**

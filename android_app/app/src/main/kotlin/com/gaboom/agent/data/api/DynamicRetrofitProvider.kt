@@ -86,15 +86,8 @@ class DynamicRetrofitProvider @Inject constructor(
     private fun buildRetrofit(baseUrl: String): Retrofit {
         val okHttpClient = buildOkHttpClient()
         
-        // Swap base url to Go Gateway if flag is enabled
-        val targetUrl = if (FeatureFlags.isEnabled("GO_GATEWAY")) {
-            "http://127.0.0.1:8080/api/agent/"
-        } else {
-            baseUrl
-        }
-        
         // Ensure base URL ends with /
-        val normalizedUrl = if (targetUrl.endsWith("/")) targetUrl else "$targetUrl/"
+        val normalizedUrl = if (baseUrl.endsWith("/")) baseUrl else "$baseUrl/"
         
         return Retrofit.Builder()
             .baseUrl(normalizedUrl)
@@ -141,10 +134,29 @@ class DynamicRetrofitProvider @Inject constructor(
             }
             response
         }
+
+        val gatewayInterceptor = Interceptor { chain ->
+            var request = chain.request()
+            if (FeatureFlags.isEnabled("GO_GATEWAY")) {
+                val url = request.url
+                val pathSegments = url.pathSegments
+                val isTicketCreate = pathSegments.contains("ticket") && 
+                    (pathSegments.contains("create") || pathSegments.contains("create-multi"))
+                
+                if (isTicketCreate) {
+                    val newUrl = url.newBuilder()
+                        .port(8080)
+                        .build()
+                    request = request.newBuilder().url(newUrl).build()
+                }
+            }
+            chain.proceed(request)
+        }
         
         return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
             .addInterceptor(clockInterceptor)
+            .addInterceptor(gatewayInterceptor)
             .addInterceptor(loggingInterceptor)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

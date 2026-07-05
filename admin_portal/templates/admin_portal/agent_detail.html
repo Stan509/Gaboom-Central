@@ -262,11 +262,11 @@
     }
 
     try {
+      if (!lat || !lng) return;
+      
       if (!map) {
         initMap();
       }
-      
-      if (!lat || !lng) return;
       
       const newLatLng = new L.LatLng(lat, lng);
       if (!marker) {

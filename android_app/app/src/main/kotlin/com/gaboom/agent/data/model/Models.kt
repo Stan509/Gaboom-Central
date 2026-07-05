@@ -434,7 +434,7 @@ data class TicketListItem(
     @SerializedName("tirage_id") val tirageId: Int?,
     @SerializedName("tirage_nom") val tirageNom: String,
     @SerializedName("tirage_open") val tirageOpen: Boolean,
-    val status: String,  // pending, won, lost, paid, cancelled
+    val status: String?,  // pending, won, lost, paid, cancelled
     @SerializedName("num_bets") val numBets: Int,
     @SerializedName("total_mise") val totalMise: Double,
     @SerializedName("total_gain_du") val totalGainDu: Double,
@@ -453,7 +453,7 @@ data class TicketListItem(
         "lost" -> "Perdu"
         "paid" -> "Déjà payé"
         "cancelled" -> "Annulé"
-        else -> status
+        else -> status ?: "Inconnu"
     }
     
     fun getStatusColor(): Long = when (status) {
@@ -489,7 +489,7 @@ data class TicketGroupItem(
     val numero: String,
     @SerializedName("tirage_id") val tirageId: Int?,
     @SerializedName("tirage_nom") val tirageNom: String,
-    val status: String,
+    val status: String?,
     @SerializedName("total_mise") val totalMise: Double,
     @SerializedName("total_gain_du") val totalGainDu: Double,
     @SerializedName("total_gain_paye") val totalGainPaye: Double,
@@ -506,7 +506,7 @@ data class TicketGroupItem(
         "lost" -> "Perdu"
         "paid" -> "Déjà payé"
         "cancelled" -> "Annulé"
-        else -> status
+        else -> status ?: "Inconnu"
     }
     
     fun getStatusColor(): Long = when (status) {

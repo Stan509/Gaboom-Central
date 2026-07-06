@@ -80,6 +80,7 @@ object AppModule {
             AgentDatabase::class.java,
             "agent_database"
         )
+        .addMigrations(com.gaboom.agent.data.local.MIGRATION_8_9)
         .fallbackToDestructiveMigration()  // For dev - use proper migration in prod
         .build()
     }

@@ -38,6 +38,8 @@ object FeatureFlags {
     const val MONITORING_DASHBOARD_ENABLED = true
     const val ALERT_ENGINE_ENABLED = true
     const val DISTRIBUTED_TRACE_ENABLED = true
+    const val OFFLINE_ENGINE_V2 = true
+    const val RUST_VALIDATOR = true
     const val CICD_VALIDATION_ENABLED = true
     const val AUTO_BACKUP_ENABLED = true
 
@@ -46,6 +48,8 @@ object FeatureFlags {
      */
     fun isEnabled(flagKey: String): Boolean {
         return when (flagKey.uppercase()) {
+            "OFFLINE_ENGINE_V2" -> OFFLINE_ENGINE_V2
+            "RUST_VALIDATOR" -> RUST_VALIDATOR
             "OFFLINE_V2" -> OFFLINE_V2
             "SYNC_ENGINE_V2" -> SYNC_ENGINE_V2
             "QUEUE_ENGINE" -> QUEUE_ENGINE

@@ -132,5 +132,7 @@ interface AgentApiService {
     suspend fun registerDevice(@Body request: DeviceRegisterRequest): Response<DeviceRegisterResponse>
 
     @GET("config/")
-    suspend fun getAgentConfig(): Response<AgentConfigResponse>
+    suspend fun getAgentConfig(
+        @Header("X-DEVICE-ID") deviceId: String
+    ): Response<AgentConfigResponse>
 }

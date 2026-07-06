@@ -96,13 +96,17 @@ func main() {
 	mux.HandleFunc("/ws/agent", wsHub.HandleAgentConnection)
 
 	// HTTP fallback pour les tickets (si APK ne supporte pas WS)
-	mux.HandleFunc("/api/agent/ticket/create_multi", func(w http.ResponseWriter, r *http.Request) {
+	handleCreateMulti := func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		wsHub.HandleHTTPFallback(w, r)
-	})
+	}
+	mux.HandleFunc("/api/agent/ticket/create_multi", handleCreateMulti)
+	mux.HandleFunc("/api/agent/ticket/create_multi/", handleCreateMulti)
+	mux.HandleFunc("/api/agent/ticket/create-multi", handleCreateMulti)
+	mux.HandleFunc("/api/agent/ticket/create-multi/", handleCreateMulti)
 
 	server := &http.Server{
 		Addr:         addr,

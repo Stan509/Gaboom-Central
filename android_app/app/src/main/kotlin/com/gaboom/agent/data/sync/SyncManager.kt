@@ -138,8 +138,9 @@ class SyncManager @Inject constructor(
                 }
                 
                 val batchSize = when {
-                    queueSize < 100 -> queueSize
-                    queueSize in 100..1000 -> syncPolicy.smallBatchSize
+                    queueSize <= 20 -> queueSize
+                    queueSize in 21..100 -> 20
+                    queueSize in 101..500 -> 100
                     else -> currentAdaptiveBatchSize
                 }
                 
@@ -310,32 +311,34 @@ class SyncManager @Inject constructor(
     
     private fun buildCreateMultiRequest(batch: TicketBatch): MultiTicketCreateRequest {
         val firstTicket = batch.tickets.first()
-        if (batch.batchId.startsWith("combined_")) {
-            val allTirageIds = batch.tickets.mapNotNull { it.tirageId }.distinct()
-            val overrides = mutableMapOf<String, MultiTicketOverride>()
-            batch.tickets.forEach { ticket ->
-                val ticketReq = gson.fromJson(ticket.payloadJson, MultiTicketCreateRequest::class.java)
-                val tid = ticket.tirageId
-                if (tid != null) {
-                    overrides[tid.toString()] = MultiTicketOverride(entries = ticketReq.entries)
-                }
+        val allTirageIds = batch.tickets.mapNotNull { it.tirageId }.distinct()
+        val overrides = mutableMapOf<String, MultiTicketOverride>()
+        
+        batch.tickets.forEach { ticket ->
+            val ticketReq = gson.fromJson(ticket.payloadJson, MultiTicketCreateRequest::class.java)
+            val entries = if (batch.batchId.startsWith("combined_")) {
+                ticketReq.entries
+            } else {
+                val overrideForTirage = ticketReq.overrides?.get(ticket.tirageId.toString())
+                overrideForTirage?.entries ?: ticketReq.entries
             }
-            return MultiTicketCreateRequest(
-                tirageIds = allTirageIds,
-                entries = emptyList(),
-                overrides = overrides,
-                sessionKey = firstTicket.sessionKey
-            )
-        } else {
-            val storedRequest = gson.fromJson(firstTicket.payloadJson, MultiTicketCreateRequest::class.java)
-            val allTirageIds = batch.tickets.mapNotNull { it.tirageId }.distinct()
-            return MultiTicketCreateRequest(
-                tirageIds = allTirageIds,
-                entries = storedRequest.entries,
-                overrides = storedRequest.overrides,
-                sessionKey = firstTicket.sessionKey
-            )
+            val tid = ticket.tirageId
+            if (tid != null) {
+                val ticketNo = ticket.localTicketNo ?: "HL-${ticket.id.take(8).uppercase()}"
+                overrides[tid.toString()] = MultiTicketOverride(
+                    entries = entries,
+                    ticketUuid = ticket.id,
+                    ticketNumber = ticketNo
+                )
+            }
         }
+        
+        return MultiTicketCreateRequest(
+            tirageIds = allTirageIds,
+            entries = emptyList(),
+            overrides = overrides,
+            sessionKey = firstTicket.sessionKey
+        )
     }
     
     private suspend fun handleSyncSuccess(

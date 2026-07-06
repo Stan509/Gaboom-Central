@@ -137,7 +137,8 @@ data class PendingTicketEntity(
     @ColumnInfo(name = "batch_id") val batchId: String? = null,  // Group ID for multi-tirage batch
     @ColumnInfo(name = "batch_label") val batchLabel: String? = null,  // Display label (e.g., "Georgia+Tennessee")
     // Phase I-A: HMAC signature for anti-tamper
-    @ColumnInfo(name = "hmac_signature") val hmacSignature: String? = null  // HMAC-SHA256 signature
+    @ColumnInfo(name = "hmac_signature") val hmacSignature: String? = null,  // HMAC-SHA256 signature
+    @ColumnInfo(name = "local_ticket_no") val localTicketNo: String? = null
 )
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -198,12 +199,6 @@ interface PendingTicketDao {
     
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(ticket: PendingTicketEntity)
-    
-    // ─── Query ──────────────────────────────────────────────────────────────────
-    
-    @Query("SELECT * FROM pending_tickets WHERE sync_status = :status ORDER BY created_at ASC")
-    suspend fun getByStatus(status: SyncStatus): List<PendingTicketEntity>
-    
     @Query("SELECT * FROM pending_tickets WHERE sync_status IN ('LOCAL_PENDING', 'PENDING', 'FAILED', 'PRINTED') ORDER BY created_at ASC")
     suspend fun getPendingAndFailed(): List<PendingTicketEntity>
     
@@ -270,6 +265,12 @@ interface PendingTicketDao {
 // DATABASE
 // ═══════════════════════════════════════════════════════════════════════════
 
+val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE pending_tickets ADD COLUMN local_ticket_no TEXT")
+    }
+}
+
 @Database(
     entities = [
         LocalTicketCache::class, 
@@ -288,7 +289,7 @@ interface PendingTicketDao {
         DrawCacheEntity::class,
         LocationQueueEntity::class
     ],
-    version = 8,  // Bumped for Phase 2C LocalTicketCache rawJson
+    version = 9,  // Bumped for Phase 2B local_ticket_no
     exportSchema = false
 )
 @TypeConverters(Converters::class)

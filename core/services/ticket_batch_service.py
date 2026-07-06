@@ -270,14 +270,56 @@ class TicketBatchService:
 
                     draw.ensure_current_session()
 
-                    ticket_number = _generate_ticket_number()
+                    override_data = overrides.get(str(draw.id), {}) if overrides else {}
+                    ticket_uuid = override_data.get("ticket_uuid")
+                    ticket_number = override_data.get("ticket_number")
+                    
+                    if ticket_uuid:
+                        existing_ticket = Ticket.objects.filter(id=ticket_uuid).first()
+                        if existing_ticket:
+                            created_tickets.append({
+                                "tirage_id": draw.id,
+                                "tirage_nom": draw.nom,
+                                "ticket_uuid": str(existing_ticket.id),
+                                "ticket_no": existing_ticket.numero_ticket,
+                                "group_id": str(group_id),
+                                "total_mise": float(existing_ticket.total_mise),
+                                "lines": [{
+                                    "jeu": l.jeu.upper(),
+                                    "valeur": l.valeur,
+                                    "mise": float(l.mise),
+                                    "potentiel_gain": float(l.potentiel_gain)
+                                } for l in existing_ticket.lignes.all()],
+                            })
+                            continue
+
+                    if ticket_number:
+                        existing_number_ticket = Ticket.objects.filter(numero_ticket=ticket_number).first()
+                        if existing_number_ticket and str(existing_number_ticket.id) != ticket_uuid:
+                            from core.services.security_audit import SecurityAuditService, SecuritySeverity
+                            SecurityAuditService.log_security_event(
+                                action="DUPLICATE_TICKET_NUMBER",
+                                severity=SecuritySeverity.CRITICAL,
+                                details=f"Attempted to create duplicate ticket number {ticket_number} with different UUID (original UUID: {existing_number_ticket.id}, new UUID: {ticket_uuid})"
+                            )
+                            failed_tirages.append({
+                                "tirage_id": draw.id,
+                                "tirage_nom": draw.nom,
+                                "error": f"Duplicate ticket number {ticket_number} detected",
+                            })
+                            continue
+
+                    ticket_id_to_use = uuid.UUID(ticket_uuid) if ticket_uuid else uuid.uuid4()
+                    ticket_number_to_use = ticket_number if ticket_number else _generate_ticket_number()
+
                     ticket = Ticket.objects.create(
+                        id=ticket_id_to_use,
                         borlette=borlette,
                         agent=agent,
                         tirage=draw,
                         tirage_session_key=draw.session_key,
                         group_id=group_id,
-                        numero_ticket=ticket_number,
+                        numero_ticket=ticket_number_to_use,
                         total_mise=Decimal("0"),
                         statut=TicketStatus.VALIDE,
                     )

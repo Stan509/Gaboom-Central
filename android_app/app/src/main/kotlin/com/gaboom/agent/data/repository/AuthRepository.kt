@@ -79,12 +79,14 @@ class AuthRepository @Inject constructor(
         try {
             // Check if device already registered
             val existingCreds = agentConfigDataStore.getDeviceCredentials()
-            if (existingCreds == null) {
+            var activeDeviceId = existingCreds?.deviceId
+            if (activeDeviceId == null) {
                 // Register new device
                 val deviceResponse = apiService.registerDevice(DeviceRegisterRequest("Android Agent App"))
                 if (deviceResponse.isSuccessful && deviceResponse.body()?.success == true) {
                     val deviceBody = deviceResponse.body()!!
                     deviceBody.deviceId?.let { deviceId ->
+                        activeDeviceId = deviceId
                         deviceBody.deviceSecret?.let { deviceSecret ->
                             agentConfigDataStore.saveDeviceCredentials(deviceId, deviceSecret, "Android Agent App")
                         }
@@ -93,10 +95,19 @@ class AuthRepository @Inject constructor(
             }
             
             // Fetch agent config (allow_offline_print, etc.)
-            val configResponse = apiService.getAgentConfig()
+            val configResponse = apiService.getAgentConfig(activeDeviceId ?: "")
             if (configResponse.isSuccessful && configResponse.body()?.success == true) {
                 val configBody = configResponse.body()!!
                 agentConfigDataStore.setAllowOfflinePrint(configBody.allowOfflinePrint)
+                
+                // Save range configuration
+                configBody.range?.let { range ->
+                    agentConfigDataStore.saveTicketNumberRange(
+                        start = range.ticketNumberStart,
+                        end = range.ticketNumberEnd,
+                        current = range.ticketNumberCurrent
+                    )
+                }
                 
                 // Update cached borlette configuration dynamically
                 configBody.borlette?.let { borlette ->

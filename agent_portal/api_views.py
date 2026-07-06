@@ -2028,7 +2028,8 @@ def api_agent_config(request: HttpRequest) -> JsonResponse:
             "success": true,
             "allow_offline_print": false,
             "server_time": "2025-02-01T23:30:00-05:00",
-            "version": "gaboom-central-1.0"
+            "version": "gaboom-central-1.0",
+            "range": { ... }
         }
     """
     agent = _get_agent_from_request(request)
@@ -2037,10 +2038,23 @@ def api_agent_config(request: HttpRequest) -> JsonResponse:
     
     borlette = agent.borlette
     
+    device_id = request.headers.get("X-DEVICE-ID", "")
+    from accounts.models import AgentDevice
+    device = AgentDevice.objects.filter(device_id=device_id, agent=agent, is_active=True).first()
+    
+    range_data = None
+    if device:
+        range_data = {
+            "ticket_number_start": device.ticket_number_start,
+            "ticket_number_end": device.ticket_number_end,
+            "ticket_number_current": device.ticket_number_current,
+        }
+    
     return _json_success({
         "allow_offline_print": borlette.allow_offline_print,
         "server_time": timezone.now().isoformat(),
         "version": "gaboom-central-1.1-offline",
+        "range": range_data,
         "borlette": {
             "id": borlette.id,
             "nom": borlette.nom_borlette,

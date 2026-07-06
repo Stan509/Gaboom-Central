@@ -185,7 +185,9 @@ data class MultiTicketCreateRequest(
 )
 
 data class MultiTicketOverride(
-    val entries: List<MultiTicketEntry>
+    val entries: List<MultiTicketEntry>,
+    @SerializedName("ticket_uuid") val ticketUuid: String? = null,
+    @SerializedName("ticket_number") val ticketNumber: String? = null
 )
 
 data class MultiTicketCreateResponse(
@@ -218,7 +220,9 @@ data class CreatedTicketInfo(
     val tirageNom: String,
     val totalMise: Double,
     val printed: Boolean = false,
-    val isOffline: Boolean = false
+    val isOffline: Boolean = false,
+    val signature: String? = null,
+    val hash: String? = null
 )
 
 data class MultiTicketLineInfo(
@@ -620,12 +624,19 @@ data class DeviceRegisterResponse(
     @SerializedName("device_name") val deviceName: String?
 )
 
+data class DeviceRangeInfo(
+    @SerializedName("ticket_number_start") val ticketNumberStart: Long,
+    @SerializedName("ticket_number_end") val ticketNumberEnd: Long,
+    @SerializedName("ticket_number_current") val ticketNumberCurrent: Long
+)
+
 data class AgentConfigResponse(
     val success: Boolean = false,
     val error: String? = null,
     @SerializedName("allow_offline_print") val allowOfflinePrint: Boolean = false,
     @SerializedName("server_time") val serverTime: String?,
     val version: String?,
+    val range: DeviceRangeInfo? = null,
     val borlette: BorletteInfo? = null
 )
 

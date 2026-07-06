@@ -1100,7 +1100,13 @@ class VenteViewModel @Inject constructor(
     ): CreatedTicketInfo {
         val totalMise = apiLines.sumOf { it.mise }
         val localId = UUID.randomUUID().toString()
-        val localTicketNo = "HL-${localId.take(8).uppercase()}"
+        val localTicketNo = if (com.gaboom.agent.data.config.FeatureFlags.isEnabled("OFFLINE_ENGINE_V2")) {
+            val seq = agentConfigDataStore.getAndIncrementTicketNumber()
+            val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+            "CB-$year-$seq"
+        } else {
+            "HL-${localId.take(8).uppercase()}"
+        }
         
         val request = MultiTicketCreateRequest(
             tirageIds = listOf(tirage.id),
@@ -1112,37 +1118,40 @@ class VenteViewModel @Inject constructor(
         val linesSummary = apiLines.take(5).joinToString(", ") { "${it.jeu}:${it.valeur}" } + 
                            if (apiLines.size > 5) "..." else ""
                            
-        val deviceCreds = agentConfigDataStore.getDeviceCredentials()
-        val hmacSignature = if (deviceCreds != null) {
-            HmacUtil.signPayload(
-                deviceSecret = deviceCreds.deviceSecret,
-                payloadJson = payloadJson,
-                sessionKey = tirage.sessionKey ?: ""
-            )
-        } else null
-        
-        val pendingTicket = PendingTicketEntity(
-            id = localId,
-            payloadJson = payloadJson,
-            tirageIds = tirage.id.toString(),
-            tirageId = tirage.id,
-            sessionKey = tirage.sessionKey,
-            totalMise = totalMise,
-            linesSummary = linesSummary,
-            syncStatus = SyncStatus.PENDING,
-            hmacSignature = hmacSignature
-        )
-        pendingTicketDao.insert(pendingTicket)
-        
-        return CreatedTicketInfo(
-            ticketId = localId,
-            ticketNo = localTicketNo,
-            tirageId = tirage.id,
-            tirageNom = tirage.nom,
-            totalMise = totalMise,
-            isOffline = true
-        )
-    }
+         val deviceCreds = agentConfigDataStore.getDeviceCredentials()
+         val hmacSignature = if (deviceCreds != null) {
+             HmacUtil.signPayload(
+                 deviceSecret = deviceCreds.deviceSecret,
+                 payloadJson = payloadJson,
+                 sessionKey = tirage.sessionKey ?: ""
+             )
+         } else null
+         
+         val pendingTicket = PendingTicketEntity(
+             id = localId,
+             payloadJson = payloadJson,
+             tirageIds = tirage.id.toString(),
+             tirageId = tirage.id,
+             sessionKey = tirage.sessionKey,
+             totalMise = totalMise,
+             linesSummary = linesSummary,
+             syncStatus = SyncStatus.PENDING,
+             hmacSignature = hmacSignature,
+             localTicketNo = localTicketNo
+         )
+         pendingTicketDao.insert(pendingTicket)
+         
+         return CreatedTicketInfo(
+             ticketId = localId,
+             ticketNo = localTicketNo,
+             tirageId = tirage.id,
+             tirageNom = tirage.nom,
+             totalMise = totalMise,
+             isOffline = true,
+             signature = hmacSignature,
+             hash = hmacSignature
+         )
+     }
 
     private fun buildOfflinePrintData(ticket: CreatedTicketInfo, apiLines: List<TicketLine>): PrintData {
         val lines = apiLines.map { line ->
@@ -1157,6 +1166,14 @@ class VenteViewModel @Inject constructor(
         val now = java.util.Date(com.gaboom.agent.data.clock.SecuredClock.now())
         val dateFormat = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
         val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+
+        val deviceCreds = kotlinx.coroutines.runBlocking { agentConfigDataStore.getDeviceCredentials() }
+        val deviceId = deviceCreds?.deviceId ?: "unknown_device"
+        val agentId = _uiState.value.agentName.ifEmpty { "unknown_agent" }
+        val ts = now.time
+        val sig = ticket.signature ?: ""
+        val hash = ticket.hash ?: ""
+        val qrUrl = "https://www.gaboombos.com/ticket/scan/?uuid=${ticket.ticketId}&no=${ticket.ticketNo}&draw=${ticket.tirageId}&station=$agentId&term=$deviceId&ts=$ts&sig=$sig&hash=$hash"
 
         return PrintData(
             borletteName = _uiState.value.borletteName.ifEmpty { "Gaboom" },
@@ -1174,7 +1191,8 @@ class VenteViewModel @Inject constructor(
             isOffline = true,
             ticketFooterText = _uiState.value.ticketFooterText,
             mariageGratuitActif = _uiState.value.mariageGratuitActif,
-            mariageGratuitMontant = _uiState.value.mariageGratuitMontant
+            mariageGratuitMontant = _uiState.value.mariageGratuitMontant,
+            qrCodeUrl = qrUrl
         )
     }
 

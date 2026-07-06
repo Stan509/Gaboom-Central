@@ -1014,6 +1014,11 @@ class AgentDevice(models.Model):
     device_name = models.CharField(max_length=100, blank=True, default="")
     is_active = models.BooleanField(default=True)
     
+    # Official ticket number sequence allocation
+    ticket_number_start = models.BigIntegerField(default=5000000001)
+    ticket_number_end = models.BigIntegerField(default=5000999999)
+    ticket_number_current = models.BigIntegerField(default=5000000001)
+    
     created_at = models.DateTimeField(auto_now_add=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
     
@@ -1026,6 +1031,14 @@ class AgentDevice(models.Model):
     def __str__(self) -> str:
         return f"{self.agent.nom} - {self.device_name or self.device_id[:8]}"
     
+    def save(self, *args, **kwargs):
+        if not self.pk:
+            count = AgentDevice.objects.count()
+            self.ticket_number_start = 5000000001 + (count * 1000000)
+            self.ticket_number_end = self.ticket_number_start + 999998
+            self.ticket_number_current = self.ticket_number_start
+        super().save(*args, **kwargs)
+
     def mark_used(self):
         self.last_used_at = timezone.now()
         self.save(update_fields=["last_used_at"])

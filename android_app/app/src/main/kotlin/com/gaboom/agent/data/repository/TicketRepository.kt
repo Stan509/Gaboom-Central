@@ -177,7 +177,13 @@ class TicketRepository @Inject constructor(
                 val groupId = UUID.randomUUID().toString()
                 val ticketsList = request.tirageIds.map { tirageId ->
                     val localId = UUID.randomUUID().toString()
-                    val localTicketNo = "HL-${localId.take(8).uppercase()}"
+                    val localTicketNo = if (com.gaboom.agent.data.config.FeatureFlags.isEnabled("OFFLINE_ENGINE_V2")) {
+                        kotlinx.coroutines.runBlocking { agentConfigDataStore.getAndIncrementTicketNumber() }
+                        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+                        "CB-$year-${kotlinx.coroutines.runBlocking { agentConfigDataStore.getAndIncrementTicketNumber() - 1 }}" // Subtract 1 since runBlocking increments it
+                    } else {
+                        "HL-${localId.take(8).uppercase()}"
+                    }
                     
                     val payloadJson = gson.toJson(request)
                     val linesSummary = request.entries.take(5).joinToString(", ") { "${it.game}:${it.number}" } + 
@@ -202,7 +208,8 @@ class TicketRepository @Inject constructor(
                         linesSummary = linesSummary,
                         syncStatus = SyncStatus.LOCAL_PENDING,
                         hmacSignature = hmacSignature,
-                        batchId = groupId
+                        batchId = groupId,
+                        localTicketNo = localTicketNo
                     )
                     pendingTicketDao.insert(pendingTicket)
 
@@ -216,6 +223,27 @@ class TicketRepository @Inject constructor(
                         lines = null
                     )
 
+                    val ticketItem = com.gaboom.agent.data.model.TicketListItem(
+                        id = localId,
+                        numero = localTicketNo,
+                        groupId = groupId,
+                        tirageId = tirageId,
+                        tirageNom = "Tirage",
+                        tirageOpen = true,
+                        status = "pending",
+                        numBets = request.entries.size,
+                        totalMise = request.entries.sumOf { it.stake },
+                        totalGainDu = 0.0,
+                        totalGainPaye = 0.0,
+                        isWinner = false,
+                        isPaid = false,
+                        canPay = false,
+                        canVoid = true,
+                        canReprint = true,
+                        createdAt = java.time.LocalDateTime.now().toString(),
+                        ageMinutes = 0.0
+                    )
+
                     // Save to local read cache
                     localTicketCacheDao.insert(
                         LocalTicketCache(
@@ -225,7 +253,7 @@ class TicketRepository @Inject constructor(
                             ticketNo = localTicketNo,
                             totalMise = request.entries.sumOf { it.stake },
                             createdAt = System.currentTimeMillis(),
-                            rawJson = gson.toJson(multiTicket)
+                            rawJson = gson.toJson(ticketItem)
                         )
                     )
 

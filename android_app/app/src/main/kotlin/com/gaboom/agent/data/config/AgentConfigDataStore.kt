@@ -177,6 +177,34 @@ class AgentConfigDataStore @Inject constructor(
         }
     }
 
+    // ─── Ticket Number Range Sequence ─────────────────────────────────────────
+
+    suspend fun saveTicketNumberRange(start: Long, end: Long, current: Long) {
+        dataStore.edit { prefs ->
+            prefs[stringPreferencesKey("ticket_number_start")] = start.toString()
+            prefs[stringPreferencesKey("ticket_number_end")] = end.toString()
+            prefs[stringPreferencesKey("ticket_number_current")] = current.toString()
+        }
+    }
+
+    suspend fun getAndIncrementTicketNumber(): Long {
+        var current: Long = 0L
+        dataStore.edit { prefs ->
+            val startVal = prefs[stringPreferencesKey("ticket_number_start")]?.toLongOrNull() ?: 5000000001L
+            val endVal = prefs[stringPreferencesKey("ticket_number_end")]?.toLongOrNull() ?: 5000999999L
+            val currVal = prefs[stringPreferencesKey("ticket_number_current")]?.toLongOrNull() ?: startVal
+            
+            current = currVal
+            
+            var nextVal = currVal + 1
+            if (nextVal > endVal) {
+                nextVal = startVal
+            }
+            prefs[stringPreferencesKey("ticket_number_current")] = nextVal.toString()
+        }
+        return current
+    }
+
     // ─── Clear All ─────────────────────────────────────────────────────────────
 
     suspend fun clearAll() {

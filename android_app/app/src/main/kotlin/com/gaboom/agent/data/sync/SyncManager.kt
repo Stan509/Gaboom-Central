@@ -69,7 +69,8 @@ class SyncManager @Inject constructor(
     private val networkMonitor: NetworkMonitor,
     private val syncPolicy: com.gaboom.agent.policy.SyncPolicy,
     private val gson: Gson,
-    private val agentConfigDataStore: AgentConfigDataStore
+    private val agentConfigDataStore: AgentConfigDataStore,
+    private val localTicketCacheDao: com.gaboom.agent.data.local.LocalTicketCacheDao
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
@@ -359,6 +360,9 @@ class SyncManager @Inject constructor(
                     serverTicketId = createdTicket.ticketId,
                     serverTicketNo = createdTicket.ticketNo
                 )
+                // Phase 3: Mark as uploaded in the local cache
+                localTicketCacheDao.markUploaded(localTicket.id)
+                
                 _syncEvents.emit(SyncEvent.TicketSynced(
                     localId = localTicket.id,
                     serverTicketNo = createdTicket.ticketNo
@@ -443,6 +447,9 @@ class SyncManager @Inject constructor(
                 status = targetStatus,
                 error = errorMsg
             )
+            // Phase 3: Mark as failed in local cache
+            localTicketCacheDao.markUploadFailed(ticket.id)
+            
             _syncEvents.emit(SyncEvent.TicketFailed(
                 localId = ticket.id,
                 error = errorMsg,

@@ -76,10 +76,7 @@ fun SyncScreen(
         ) {
             // Status Card
             StatusCard(
-                isOnline = uiState.isOnline,
-                isSyncing = uiState.isSyncing,
-                pendingCount = uiState.pendingCount,
-                failedCount = uiState.failedCount,
+                uiState = uiState,
                 onSyncNow = { viewModel.syncNow() }
             )
 
@@ -117,10 +114,7 @@ fun SyncScreen(
 
 @Composable
 fun StatusCard(
-    isOnline: Boolean,
-    isSyncing: Boolean,
-    pendingCount: Int,
-    failedCount: Int,
+    uiState: SyncUiState,
     onSyncNow: () -> Unit
 ) {
     Card(
@@ -138,22 +132,101 @@ fun StatusCard(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(
-                    imageVector = if (isOnline) Icons.Default.Wifi else Icons.Default.WifiOff,
+                    imageVector = if (uiState.isOnline) Icons.Default.Wifi else Icons.Default.WifiOff,
                     contentDescription = null,
-                    tint = if (isOnline) Color(0xFF10B981) else Color(0xFFEF4444),
+                    tint = if (uiState.isOnline) Color(0xFF10B981) else Color(0xFFEF4444),
                     modifier = Modifier.size(24.dp)
                 )
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isOnline) "Connecté" else "Hors ligne",
+                        text = if (uiState.isOnline) "Connecté" else "Hors ligne",
                         fontWeight = FontWeight.Bold,
-                        color = if (isOnline) Color(0xFF10B981) else Color(0xFFEF4444)
+                        color = if (uiState.isOnline) Color(0xFF10B981) else Color(0xFFEF4444)
                     )
                     Text(
-                        text = if (isOnline) "Synchronisation automatique active" else "Les tickets seront synchronisés à la reconnexion",
+                        text = if (uiState.isOnline) "Synchronisation automatique active" else "Les tickets seront synchronisés à la reconnexion",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                }
+            }
+
+            // Gate Status Warning
+            if (uiState.offlineGateState.isBlocked) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    color = Color(0xFFFEF2F2), // Light Red background
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = "Warning",
+                            tint = Color(0xFFEF4444),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = when (uiState.offlineGateState.reason) {
+                                com.gaboom.agent.data.sync.SaleBlockedReason.OFFLINE_LIMIT_EXCEEDED -> "Vente bloquée: Hors-ligne > 25min"
+                                com.gaboom.agent.data.sync.SaleBlockedReason.CLOCK_DRIFT_EXCEEDED -> "Vente bloquée: Horloge désynchronisée (${uiState.clockDriftSeconds}s)"
+                                com.gaboom.agent.data.sync.SaleBlockedReason.NO_SERVER_CONTACT -> "Vente bloquée: Aucun contact serveur"
+                                else -> "Vente bloquée"
+                            },
+                            color = Color(0xFF991B1B), // Dark Red text
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            } else if (!uiState.isOnline && uiState.offlineGateState.minutesBeforeBlock != null) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Surface(
+                    color = Color(0xFFFFFBEB), // Light Yellow background
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Timer,
+                            contentDescription = "Timer",
+                            tint = Color(0xFFD97706),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Temps hors-ligne restant: ${uiState.offlineGateState.minutesBeforeBlock} min",
+                            color = Color(0xFF92400E), // Dark Yellow text
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // Clock Status
+            if (uiState.isOnline && !uiState.isClockTrusted) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Default.Schedule,
+                        contentDescription = "Clock Sync",
+                        tint = Color(0xFFF59E0B),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Synchronisation de l'horloge en cours...",
+                        fontSize = 12.sp,
+                        color = Color(0xFFD97706)
                     )
                 }
             }
@@ -167,13 +240,13 @@ fun StatusCard(
             ) {
                 StatItem(
                     label = "En attente",
-                    value = pendingCount.toString(),
+                    value = uiState.pendingCount.toString(),
                     color = Color(0xFF3AA0FF)
                 )
                 StatItem(
                     label = "Échoués",
-                    value = failedCount.toString(),
-                    color = if (failedCount > 0) Color(0xFFEF4444) else Color(0xFF6B7280)
+                    value = uiState.failedCount.toString(),
+                    color = if (uiState.failedCount > 0) Color(0xFFEF4444) else Color(0xFF6B7280)
                 )
             }
 
@@ -182,10 +255,10 @@ fun StatusCard(
             // Sync Button
             Button(
                 onClick = onSyncNow,
-                enabled = isOnline && !isSyncing && (pendingCount > 0 || failedCount > 0),
+                enabled = uiState.isOnline && !uiState.isSyncing && (uiState.pendingCount > 0 || uiState.failedCount > 0),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                if (isSyncing) {
+                if (uiState.isSyncing) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(20.dp),
                         strokeWidth = 2.dp,
@@ -235,6 +308,7 @@ fun PendingTicketCard(
         SyncStatus.SYNCING -> Color(0xFFF59E0B)
         SyncStatus.SYNCED -> Color(0xFF10B981)
         SyncStatus.FAILED,
+        SyncStatus.UPLOAD_FAILED,
         SyncStatus.CONFLICT -> Color(0xFFEF4444)
         SyncStatus.VALIDATION_PENDING -> Color(0xFFF59E0B)
     }
@@ -245,7 +319,8 @@ fun PendingTicketCard(
         SyncStatus.PRINTED -> "Imprimé local"
         SyncStatus.SYNCING -> "Synchronisation..."
         SyncStatus.SYNCED -> "Synchronisé"
-        SyncStatus.FAILED -> "Échec"
+        SyncStatus.FAILED,
+        SyncStatus.UPLOAD_FAILED -> "Échec"
         SyncStatus.CONFLICT -> "Conflit"
         SyncStatus.VALIDATION_PENDING -> "En attente validation"
     }
@@ -604,6 +679,7 @@ fun MiniTicketItem(
         SyncStatus.SYNCING -> Color(0xFFF59E0B)
         SyncStatus.SYNCED -> Color(0xFF10B981)
         SyncStatus.FAILED,
+        SyncStatus.UPLOAD_FAILED,
         SyncStatus.CONFLICT -> Color(0xFFEF4444)
         SyncStatus.VALIDATION_PENDING -> Color(0xFFF59E0B)
     }

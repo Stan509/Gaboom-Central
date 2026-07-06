@@ -167,6 +167,7 @@ class TicketManagementViewModel @Inject constructor(
                 com.gaboom.agent.data.local.SyncStatus.PRINTED -> "pending"
                 com.gaboom.agent.data.local.SyncStatus.SYNCING -> "pending"
                 com.gaboom.agent.data.local.SyncStatus.FAILED,
+                com.gaboom.agent.data.local.SyncStatus.UPLOAD_FAILED,
                 com.gaboom.agent.data.local.SyncStatus.CONFLICT -> "pending"
                 com.gaboom.agent.data.local.SyncStatus.SYNCED -> "paid"
                 com.gaboom.agent.data.local.SyncStatus.VALIDATION_PENDING -> "pending"

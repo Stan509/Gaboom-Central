@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -36,6 +37,10 @@ class AgentConfigDataStore @Inject constructor(
         val CACHED_RESULTATS = stringPreferencesKey("cached_resultats")
         val CACHED_DASHBOARD = stringPreferencesKey("cached_dashboard")
         val CACHED_TICKET_LIST = stringPreferencesKey("cached_ticket_list")
+        // Phase 3 — Local-First
+        val LAST_SERVER_CONTACT_AT = longPreferencesKey("last_server_contact_at")
+        val SERVER_IN_MAINTENANCE = booleanPreferencesKey("server_in_maintenance")
+        val RANGE_NEEDS_EXTENSION = booleanPreferencesKey("range_needs_extension")
     }
 
     suspend fun saveCachedTirages(tirages: List<com.gaboom.agent.data.model.Tirage>) {
@@ -189,20 +194,55 @@ class AgentConfigDataStore @Inject constructor(
 
     suspend fun getAndIncrementTicketNumber(): Long {
         var current: Long = 0L
+        var rangeExhausted = false
         dataStore.edit { prefs ->
             val startVal = prefs[stringPreferencesKey("ticket_number_start")]?.toLongOrNull() ?: 5000000001L
             val endVal = prefs[stringPreferencesKey("ticket_number_end")]?.toLongOrNull() ?: 5000999999L
             val currVal = prefs[stringPreferencesKey("ticket_number_current")]?.toLongOrNull() ?: startVal
-            
+
             current = currVal
-            
-            var nextVal = currVal + 1
+
+            val nextVal = currVal + 1
             if (nextVal > endVal) {
-                nextVal = startVal
+                // Range exhausted — keep current at end, flag for server re-allocation
+                rangeExhausted = true
+                prefs[RANGE_NEEDS_EXTENSION] = true
+            } else {
+                prefs[stringPreferencesKey("ticket_number_current")] = nextVal.toString()
             }
-            prefs[stringPreferencesKey("ticket_number_current")] = nextVal.toString()
         }
         return current
+    }
+
+    suspend fun rangeNeedsExtension(): Boolean {
+        return dataStore.data.map { prefs -> prefs[RANGE_NEEDS_EXTENSION] ?: false }.first()
+    }
+
+    suspend fun clearRangeExtensionFlag() {
+        dataStore.edit { prefs -> prefs[RANGE_NEEDS_EXTENSION] = false }
+    }
+
+    // ─── Server Contact Tracking (Phase 3) ───────────────────────────────────
+
+    suspend fun updateServerContact() {
+        dataStore.edit { prefs ->
+            prefs[LAST_SERVER_CONTACT_AT] = System.currentTimeMillis()
+            prefs[SERVER_IN_MAINTENANCE] = false
+        }
+    }
+
+    suspend fun recordServerMaintenance() {
+        dataStore.edit { prefs ->
+            prefs[SERVER_IN_MAINTENANCE] = true
+        }
+    }
+
+    suspend fun getLastServerContactAt(): Long {
+        return dataStore.data.map { prefs -> prefs[LAST_SERVER_CONTACT_AT] ?: 0L }.first()
+    }
+
+    suspend fun isServerInMaintenance(): Boolean {
+        return dataStore.data.map { prefs -> prefs[SERVER_IN_MAINTENANCE] ?: false }.first()
     }
 
     // ─── Clear All ─────────────────────────────────────────────────────────────

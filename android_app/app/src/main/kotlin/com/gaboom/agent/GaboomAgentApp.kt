@@ -2,12 +2,23 @@ package com.gaboom.agent
 
 import android.app.Application
 import dagger.hilt.android.HiltAndroidApp
+import androidx.work.Configuration
+import androidx.hilt.work.HiltWorkerFactory
+import javax.inject.Inject
 
 /**
  * Application principale Gaboom Agent
  */
 @HiltAndroidApp
-class GaboomAgentApp : Application() {
+class GaboomAgentApp : Application(), Configuration.Provider {
+
+    @Inject lateinit var workerFactory: HiltWorkerFactory
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setWorkerFactory(workerFactory)
+            .build()
+
     override fun onCreate() {
         super.onCreate()
         
@@ -34,5 +45,9 @@ class GaboomAgentApp : Application() {
             }
             defaultHandler?.uncaughtException(thread, throwable)
         }
+
+        // Phase 3: Start background workers
+        com.gaboom.agent.data.sync.HeartbeatWorker.schedule(this)
+        com.gaboom.agent.data.sync.TicketExpiryWorker.schedule(this)
     }
 }

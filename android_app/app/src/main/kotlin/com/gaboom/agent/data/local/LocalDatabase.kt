@@ -25,7 +25,12 @@ data class LocalTicketCache(
     @ColumnInfo(name = "ticket_no") val ticketNo: String,
     @ColumnInfo(name = "total_mise") val totalMise: Double,
     @ColumnInfo(name = "created_at") val createdAt: Long = System.currentTimeMillis(),
-    @ColumnInfo(name = "raw_json") val rawJson: String? = null
+    @ColumnInfo(name = "raw_json") val rawJson: String? = null,
+    // Phase 3 — Local-First
+    /** Unix ms at which this record expires locally (created_at + 95 days). */
+    @ColumnInfo(name = "expires_at") val expiresAt: Long = createdAt + 95L * 24 * 60 * 60 * 1000,
+    /** Whether this ticket has been uploaded to the server. */
+    @ColumnInfo(name = "upload_status") val uploadStatus: String = "PENDING"
 )
 
 @Entity(tableName = "tirage_session_cache")
@@ -46,7 +51,8 @@ enum class SyncStatus {
     FAILED,              // Sync failed (conflict or error)
     CONFLICT,            // Sync rejected due to conflict
     PENDING,             // Alias/legacy for LOCAL_PENDING
-    VALIDATION_PENDING   // Legacy validation pending
+    VALIDATION_PENDING,  // Legacy validation pending
+    UPLOAD_FAILED        // Phase 3: background upload failed (server store)
 }
 
 @Entity(tableName = "offline_sessions")
@@ -174,6 +180,19 @@ interface LocalTicketCacheDao {
     
     @Query("DELETE FROM local_ticket_cache")
     suspend fun deleteAll()
+
+    // Phase 3 — expiry and upload tracking
+    @Query("DELETE FROM local_ticket_cache WHERE expires_at > 0 AND expires_at < :nowMs")
+    suspend fun deleteExpired(nowMs: Long)
+
+    @Query("UPDATE local_ticket_cache SET upload_status = 'UPLOADED' WHERE ticketUuid = :uuid")
+    suspend fun markUploaded(uuid: String)
+
+    @Query("UPDATE local_ticket_cache SET upload_status = 'FAILED' WHERE ticketUuid = :uuid")
+    suspend fun markUploadFailed(uuid: String)
+
+    @Query("SELECT * FROM local_ticket_cache WHERE upload_status = 'PENDING' ORDER BY created_at ASC")
+    suspend fun getPendingUpload(): List<LocalTicketCache>
 }
 
 @Dao
@@ -256,7 +275,11 @@ interface PendingTicketDao {
     
     @Query("DELETE FROM pending_tickets WHERE sync_status = 'SYNCED'")
     suspend fun deleteSynced()
-    
+
+    // Phase 3 — expiry: returns synced rows older than the given timestamp for batch deletion
+    @Query("SELECT * FROM pending_tickets WHERE sync_status = 'SYNCED' AND created_at < :cutoffMs")
+    suspend fun getSyncedBefore(cutoffMs: Long): List<PendingTicketEntity>
+
     @Query("DELETE FROM pending_tickets")
     suspend fun deleteAll()
 }
@@ -268,6 +291,24 @@ interface PendingTicketDao {
 val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
     override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
         db.execSQL("ALTER TABLE pending_tickets ADD COLUMN local_ticket_no TEXT")
+    }
+}
+
+/** Phase 3: adds 95-day expiry and upload status to the local ticket cache. Preserves all existing rows. */
+val MIGRATION_9_10 = object : androidx.room.migration.Migration(9, 10) {
+    override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+        // Add expires_at: default = created_at + 95 days (in ms)
+        db.execSQL(
+            "ALTER TABLE local_ticket_cache ADD COLUMN expires_at INTEGER NOT NULL DEFAULT 0"
+        )
+        // Backfill existing rows: expires_at = created_at + 95 days
+        db.execSQL(
+            "UPDATE local_ticket_cache SET expires_at = created_at + ${95L * 24 * 60 * 60 * 1000} WHERE expires_at = 0"
+        )
+        // Add upload_status: existing rows are considered PENDING (they may need re-upload)
+        db.execSQL(
+            "ALTER TABLE local_ticket_cache ADD COLUMN upload_status TEXT NOT NULL DEFAULT 'PENDING'"
+        )
     }
 }
 
@@ -289,7 +330,7 @@ val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
         DrawCacheEntity::class,
         LocationQueueEntity::class
     ],
-    version = 9,  // Bumped for Phase 2B local_ticket_no
+    version = 10,  // Phase 3: expires_at + upload_status on local_ticket_cache
     exportSchema = false
 )
 @TypeConverters(Converters::class)

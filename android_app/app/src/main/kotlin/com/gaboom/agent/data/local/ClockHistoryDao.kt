@@ -19,4 +19,7 @@ interface ClockHistoryDao {
 
     @Query("DELETE FROM clock_history")
     suspend fun deleteAll()
+    
+    @Query("SELECT * FROM clock_history ORDER BY observedAt DESC LIMIT 1")
+    fun getLatestSyncFlow(): kotlinx.coroutines.flow.Flow<ClockHistoryEntity?>
 }

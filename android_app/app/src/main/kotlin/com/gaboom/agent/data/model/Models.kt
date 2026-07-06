@@ -460,7 +460,7 @@ data class TicketListItem(
         else -> status ?: "Inconnu"
     }
     
-    fun getStatusColor(): Long = when (status) {
+    fun getStatusColor(): Long = when (status ?: "") {
         "pending" -> 0xFFFFA500  // Orange
         "won" -> 0xFF10B981      // Green
         "lost" -> 0xFFEF4444     // Red

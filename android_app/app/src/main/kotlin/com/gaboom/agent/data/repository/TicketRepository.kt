@@ -28,249 +28,193 @@ class TicketRepository @Inject constructor(
     private val syncManagerProvider: Provider<SyncManager>,
     private val gson: Gson
 ) {
+    /**
+     * Phase 3 — Local-First.
+     *
+     * Always creates the ticket locally first. The ticket number is allocated from the
+     * device range (CB-YYYY-N). The ticket is immediately available for printing.
+     * Background upload to the server happens asynchronously via [SyncManager].
+     */
     suspend fun createTicket(
         request: TicketCreateRequest,
         tirageId: Int,
         apiLines: List<TicketLine>
     ): Response<TicketCreateResponse> {
-        return offlineCoordinator.execute(
-            networkCall = {
-                val response = apiService.createTicket(request)
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val created = response.body()?.ticket
-                    if (created != null) {
-                        localTicketCacheDao.insert(
-                            LocalTicketCache(
-                                ticketUuid = created.id,
-                                tirageId = tirageId,
-                                sessionKey = "",
-                                ticketNo = created.numero,
-                                totalMise = created.totalMise,
-                                createdAt = System.currentTimeMillis(),
-                                rawJson = gson.toJson(created)
-                            )
-                        )
-                    }
-                }
-                response
+        return createTicketLocalFirst(
+            tirageIds = listOf(tirageId),
+            entries = apiLines.map { line ->
+                MultiTicketEntry(
+                    game = line.jeu,
+                    number = line.valeur,
+                    stake = line.mise,
+                    gratuit = line.gratuit,
+                    option = line.option
+                )
             },
-            offlineFallback = {
-                val localId = UUID.randomUUID().toString()
-                val localTicketNo = "HL-${localId.take(8).uppercase()}"
-                
-                // Convert to MultiTicketCreateRequest for consistent offline payload
-                val multiRequest = MultiTicketCreateRequest(
-                    tirageIds = listOf(tirageId),
-                    entries = apiLines.map { line ->
-                        MultiTicketEntry(
-                            game = line.jeu,
-                            number = line.valeur,
-                            stake = line.mise,
-                            gratuit = line.gratuit,
-                            option = line.option
-                        )
-                    },
-                    sessionKey = ""
-                )
-                
-                val payloadJson = gson.toJson(multiRequest)
-                val linesSummary = apiLines.take(5).joinToString(", ") { "${it.jeu}:${it.valeur}" } + 
-                                   if (apiLines.size > 5) "..." else ""
-                
-                val deviceCreds = agentConfigDataStore.getDeviceCredentials()
-                val hmacSignature = if (deviceCreds != null) {
-                    HmacUtil.signPayload(
-                        deviceSecret = deviceCreds.deviceSecret,
-                        payloadJson = payloadJson,
-                        sessionKey = ""
-                    )
-                } else null
-
-                val pendingTicket = PendingTicketEntity(
-                    id = localId,
-                    payloadJson = payloadJson,
-                    tirageIds = tirageId.toString(),
-                    tirageId = tirageId,
-                    sessionKey = "",
-                    totalMise = apiLines.sumOf { it.mise },
-                    linesSummary = linesSummary,
-                    syncStatus = SyncStatus.LOCAL_PENDING,
-                    hmacSignature = hmacSignature
-                )
-                pendingTicketDao.insert(pendingTicket)
-
-                val ticketLines = apiLines.map { line ->
-                    TicketLine(
-                        jeu = line.jeu,
-                        valeur = line.valeur,
-                        mise = line.mise,
-                        potentielGain = 0.0,
-                        gratuit = line.gratuit,
-                        option = line.option
-                    )
-                }
-
-                val ticketInfo = TicketInfo(
-                    id = localId,
-                    numero = localTicketNo,
-                    groupId = null,
-                    totalMise = apiLines.sumOf { it.mise },
-                    totalGain = 0.0,
-                    statut = "LOCAL_PENDING",
-                    createdAt = java.time.LocalDateTime.now().toString(),
-                    closedAt = null,
-                    tirages = listOf("Tirage"),
-                    lines = ticketLines
-                )
-
-                // Store immediately to local read cache
-                localTicketCacheDao.insert(
-                    LocalTicketCache(
-                        ticketUuid = localId,
-                        tirageId = tirageId,
-                        sessionKey = "",
-                        ticketNo = localTicketNo,
-                        totalMise = apiLines.sumOf { it.mise },
-                        createdAt = System.currentTimeMillis(),
-                        rawJson = gson.toJson(ticketInfo)
+            sessionKey = ""
+        ).let { multiResponse ->
+            val firstTicket = multiResponse.tickets?.firstOrNull()
+            if (firstTicket != null) {
+                retrofit2.Response.success(
+                    TicketCreateResponse(
+                        success = true,
+                        ticket = TicketInfo(
+                            id = firstTicket.ticketId,
+                            numero = firstTicket.ticketNo,
+                            groupId = firstTicket.groupId,
+                            totalMise = firstTicket.totalMise,
+                            totalGain = 0.0,
+                            statut = "pending",
+                            createdAt = java.time.LocalDateTime.now().toString(),
+                            closedAt = null,
+                            tirages = listOf("Tirage"),
+                            lines = apiLines.map { line ->
+                                TicketLine(
+                                    jeu = line.jeu, valeur = line.valeur,
+                                    mise = line.mise, potentielGain = 0.0,
+                                    gratuit = line.gratuit, option = line.option
+                                )
+                            }
+                        ),
+                        error = null
                     )
                 )
-
-                // Trigger synchronization in background immediately
-                syncManagerProvider.get().syncPendingTickets()
-
-                TicketCreateResponse(
-                    success = true,
-                    ticket = ticketInfo,
-                    error = null
+            } else {
+                retrofit2.Response.success(
+                    TicketCreateResponse(success = false, ticket = null, error = "Création locale échouée")
                 )
             }
-        )
+        }
     }
 
+    /**
+     * Phase 3 — Local-First unified ticket creation.
+     *
+     * - Allocates an official CB-YYYY-N number from the device range.
+     * - Stores to local DB immediately (ticket is usable without server response).
+     * - Enqueues for background upload via [SyncManager].
+     * - Legacy HL- tickets in DB are preserved and will be uploaded if server accepts them.
+     */
     suspend fun createMultiTicket(
         request: MultiTicketCreateRequest
     ): Response<MultiTicketCreateResponse> {
-        return offlineCoordinator.execute(
-            networkCall = {
-                val response = apiService.createMultiTicket(request)
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val body = response.body()!!
-                    val tickets = body.tickets ?: emptyList()
-                    tickets.forEach { ticket ->
-                        localTicketCacheDao.insert(
-                            LocalTicketCache(
-                                ticketUuid = ticket.ticketId,
-                                tirageId = ticket.tirageId,
-                                sessionKey = request.sessionKey ?: "",
-                                ticketNo = ticket.ticketNo,
-                                totalMise = ticket.totalMise,
-                                createdAt = System.currentTimeMillis(),
-                                rawJson = gson.toJson(ticket)
-                            )
-                        )
-                    }
-                }
-                response
-            },
-            offlineFallback = {
-                val groupId = UUID.randomUUID().toString()
-                val ticketsList = request.tirageIds.map { tirageId ->
-                    val localId = UUID.randomUUID().toString()
-                    val localTicketNo = if (com.gaboom.agent.data.config.FeatureFlags.isEnabled("OFFLINE_ENGINE_V2")) {
-                        kotlinx.coroutines.runBlocking { agentConfigDataStore.getAndIncrementTicketNumber() }
-                        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
-                        "CB-$year-${kotlinx.coroutines.runBlocking { agentConfigDataStore.getAndIncrementTicketNumber() - 1 }}" // Subtract 1 since runBlocking increments it
-                    } else {
-                        "HL-${localId.take(8).uppercase()}"
-                    }
-                    
-                    val payloadJson = gson.toJson(request)
-                    val linesSummary = request.entries.take(5).joinToString(", ") { "${it.game}:${it.number}" } + 
-                                       if (request.entries.size > 5) "..." else ""
-                                       
-                    val deviceCreds = agentConfigDataStore.getDeviceCredentials()
-                    val hmacSignature = if (deviceCreds != null) {
-                        HmacUtil.signPayload(
-                            deviceSecret = deviceCreds.deviceSecret,
-                            payloadJson = payloadJson,
-                            sessionKey = request.sessionKey ?: ""
-                        )
-                    } else null
-                    
-                    val pendingTicket = PendingTicketEntity(
-                        id = localId,
-                        payloadJson = payloadJson,
-                        tirageIds = request.tirageIds.joinToString(","),
-                        tirageId = tirageId,
-                        sessionKey = request.sessionKey,
-                        totalMise = request.entries.sumOf { it.stake },
-                        linesSummary = linesSummary,
-                        syncStatus = SyncStatus.LOCAL_PENDING,
-                        hmacSignature = hmacSignature,
-                        batchId = groupId,
-                        localTicketNo = localTicketNo
-                    )
-                    pendingTicketDao.insert(pendingTicket)
+        val result = createTicketLocalFirst(
+            tirageIds = request.tirageIds,
+            entries = request.entries,
+            sessionKey = request.sessionKey
+        )
+        return retrofit2.Response.success(result)
+    }
 
-                    val multiTicket = MultiTicketInfo(
-                        tirageId = tirageId,
-                        tirageNom = "Tirage",
-                        ticketId = localId,
-                        ticketNo = localTicketNo,
-                        groupId = groupId,
-                        totalMise = request.entries.sumOf { it.stake },
-                        lines = null
-                    )
+    /**
+     * Core local-first ticket factory. Called by both [createTicket] and [createMultiTicket].
+     */
+    internal suspend fun createTicketLocalFirst(
+        tirageIds: List<Int>,
+        entries: List<MultiTicketEntry>,
+        sessionKey: String?
+    ): MultiTicketCreateResponse {
+        val groupId = UUID.randomUUID().toString()
+        val now = System.currentTimeMillis()
+        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
 
-                    val ticketItem = com.gaboom.agent.data.model.TicketListItem(
-                        id = localId,
-                        numero = localTicketNo,
-                        groupId = groupId,
-                        tirageId = tirageId,
-                        tirageNom = "Tirage",
-                        tirageOpen = true,
-                        status = "pending",
-                        numBets = request.entries.size,
-                        totalMise = request.entries.sumOf { it.stake },
-                        totalGainDu = 0.0,
-                        totalGainPaye = 0.0,
-                        isWinner = false,
-                        isPaid = false,
-                        canPay = false,
-                        canVoid = true,
-                        canReprint = true,
-                        createdAt = java.time.LocalDateTime.now().toString(),
-                        ageMinutes = 0.0
-                    )
+        val ticketsList = tirageIds.map { tirageId ->
+            val localId = UUID.randomUUID().toString()
 
-                    // Save to local read cache
-                    localTicketCacheDao.insert(
-                        LocalTicketCache(
-                            ticketUuid = localId,
-                            tirageId = tirageId,
-                            sessionKey = request.sessionKey ?: "",
-                            ticketNo = localTicketNo,
-                            totalMise = request.entries.sumOf { it.stake },
-                            createdAt = System.currentTimeMillis(),
-                            rawJson = gson.toJson(ticketItem)
-                        )
-                    )
+            // Allocate official number from device range (CB-YYYY-N)
+            val seqNumber = agentConfigDataStore.getAndIncrementTicketNumber()
+            val localTicketNo = "CB-$year-$seqNumber"
 
-                    multiTicket
-                }
+            val multiRequest = MultiTicketCreateRequest(
+                tirageIds = listOf(tirageId),
+                entries = entries,
+                sessionKey = sessionKey
+            )
+            val payloadJson = gson.toJson(multiRequest)
+            val linesSummary = entries.take(5).joinToString(", ") { "${it.game}:${it.number}" } +
+                if (entries.size > 5) "..." else ""
 
-                // Trigger synchronization in background immediately
-                syncManagerProvider.get().syncPendingTickets()
-
-                MultiTicketCreateResponse(
-                    success = true,
-                    groupId = groupId,
-                    tickets = ticketsList,
-                    failed = null,
-                    error = null
+            val deviceCreds = agentConfigDataStore.getDeviceCredentials()
+            val hmacSignature = if (deviceCreds != null) {
+                HmacUtil.signPayload(
+                    deviceSecret = deviceCreds.deviceSecret,
+                    payloadJson = payloadJson,
+                    sessionKey = sessionKey ?: ""
                 )
-            }
+            } else null
+
+            // Persist to pending queue (for background upload)
+            val pendingTicket = PendingTicketEntity(
+                id = localId,
+                payloadJson = payloadJson,
+                tirageIds = tirageIds.joinToString(","),
+                tirageId = tirageId,
+                sessionKey = sessionKey,
+                totalMise = entries.sumOf { it.stake },
+                linesSummary = linesSummary,
+                syncStatus = SyncStatus.LOCAL_PENDING,
+                hmacSignature = hmacSignature,
+                batchId = groupId,
+                localTicketNo = localTicketNo
+            )
+            pendingTicketDao.insert(pendingTicket)
+
+            // Build display item
+            val ticketItem = TicketListItem(
+                id = localId,
+                numero = localTicketNo,
+                groupId = groupId,
+                tirageId = tirageId,
+                tirageNom = "Tirage",
+                tirageOpen = true,
+                status = "pending",
+                numBets = entries.size,
+                totalMise = entries.sumOf { it.stake },
+                totalGainDu = 0.0,
+                totalGainPaye = 0.0,
+                isWinner = false,
+                isPaid = false,
+                canPay = false,
+                canVoid = true,
+                canReprint = true,
+                createdAt = java.time.LocalDateTime.now().toString(),
+                ageMinutes = 0.0
+            )
+
+            // Persist to local read cache
+            localTicketCacheDao.insert(
+                LocalTicketCache(
+                    ticketUuid = localId,
+                    tirageId = tirageId,
+                    sessionKey = sessionKey ?: "",
+                    ticketNo = localTicketNo,
+                    totalMise = entries.sumOf { it.stake },
+                    createdAt = now,
+                    rawJson = gson.toJson(ticketItem),
+                    uploadStatus = "PENDING"
+                )
+            )
+
+            MultiTicketInfo(
+                tirageId = tirageId,
+                tirageNom = "Tirage",
+                ticketId = localId,
+                ticketNo = localTicketNo,
+                groupId = groupId,
+                totalMise = entries.sumOf { it.stake },
+                lines = null
+            )
+        }
+
+        // Trigger background upload (non-blocking)
+        syncManagerProvider.get().syncPendingTickets()
+
+        return MultiTicketCreateResponse(
+            success = true,
+            groupId = groupId,
+            tickets = ticketsList,
+            failed = null,
+            error = null
         )
     }
 

@@ -81,6 +81,7 @@ object AppModule {
             "agent_database"
         )
         .addMigrations(com.gaboom.agent.data.local.MIGRATION_8_9)
+        .addMigrations(com.gaboom.agent.data.local.MIGRATION_9_10)
         .fallbackToDestructiveMigration()  // For dev - use proper migration in prod
         .build()
     }
@@ -110,6 +111,11 @@ object AppModule {
         return database.locationQueueDao()
     }
 
+    @Provides
+    fun provideClockHistoryDao(database: AgentDatabase): com.gaboom.agent.data.local.ClockHistoryDao {
+        return database.clockHistoryDao()
+    }
+
     // ─── Network & Sync ────────────────────────────────────────────────────────
 
     @Provides
@@ -132,7 +138,8 @@ object AppModule {
         networkMonitor: NetworkMonitor,
         syncPolicy: com.gaboom.agent.policy.SyncPolicy,
         gson: Gson,
-        agentConfigDataStore: AgentConfigDataStore
+        agentConfigDataStore: AgentConfigDataStore,
+        localTicketCacheDao: com.gaboom.agent.data.local.LocalTicketCacheDao
     ): SyncManager {
         return SyncManager(
             pendingTicketDao = pendingTicketDao,
@@ -140,7 +147,16 @@ object AppModule {
             networkMonitor = networkMonitor,
             syncPolicy = syncPolicy,
             gson = gson,
-            agentConfigDataStore = agentConfigDataStore
+            agentConfigDataStore = agentConfigDataStore,
+            localTicketCacheDao = localTicketCacheDao
         )
+    }
+
+    @Provides
+    @Singleton
+    fun provideOfflineLimitEnforcer(
+        agentConfigDataStore: AgentConfigDataStore
+    ): com.gaboom.agent.data.sync.OfflineLimitEnforcer {
+        return com.gaboom.agent.data.sync.OfflineLimitEnforcer(agentConfigDataStore)
     }
 }

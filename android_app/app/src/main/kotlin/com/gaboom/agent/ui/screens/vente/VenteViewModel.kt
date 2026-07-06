@@ -104,7 +104,9 @@ class VenteViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val pendingTicketDao: PendingTicketDao,
     private val networkMonitor: NetworkMonitor,
-    private val gson: Gson
+    private val gson: Gson,
+    // Phase 3 — Local-First gatekeeper
+    private val offlineLimitEnforcer: com.gaboom.agent.data.sync.OfflineLimitEnforcer
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VenteUiState())
@@ -688,8 +690,12 @@ class VenteViewModel @Inject constructor(
                 return@launch
             }
 
-            if (!networkMonitor.isCurrentlyOnline()) {
-                createTicketOffline(tirageId, apiLines)
+            // Phase 3: Gate check
+            if (!offlineLimitEnforcer.isAllowedToSell()) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = offlineLimitEnforcer.getBlockMessage()
+                )
                 return@launch
             }
 
@@ -699,6 +705,7 @@ class VenteViewModel @Inject constructor(
                     lines = apiLines
                 )
 
+                // Phase 3: All ticket creations are local-first
                 val response = ticketRepository.createTicket(request, tirageId, apiLines)
                 if (response.isSuccessful) {
                     val body = response.body()
@@ -717,18 +724,14 @@ class VenteViewModel @Inject constructor(
                 } else {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "Erreur serveur"
+                        error = "Erreur création ticket: ${response.code()}"
                     )
                 }
             } catch (e: Exception) {
-                if (e is java.io.IOException) {
-                    createTicketOffline(tirageId, apiLines)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Erreur: ${e.message}"
-                    )
-                }
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Erreur: ${e.message}"
+                )
             }
         }
     }
@@ -748,8 +751,12 @@ class VenteViewModel @Inject constructor(
                 return@launch
             }
 
-            if (!networkMonitor.isCurrentlyOnline()) {
-                createTicketOffline(tirageId, apiLines)
+            // Phase 3: Gate check
+            if (!offlineLimitEnforcer.isAllowedToSell()) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = offlineLimitEnforcer.getBlockMessage()
+                )
                 return@launch
             }
 
@@ -759,6 +766,7 @@ class VenteViewModel @Inject constructor(
                     lines = apiLines
                 )
 
+                // Phase 3: All ticket creations are local-first
                 val response = ticketRepository.createTicket(request, tirageId, apiLines)
                 if (response.isSuccessful) {
                     val body = response.body()
@@ -784,7 +792,8 @@ class VenteViewModel @Inject constructor(
                             agentName = _uiState.value.agentName,
                             ticketFooterText = _uiState.value.ticketFooterText,
                             mariageGratuitActif = _uiState.value.mariageGratuitActif,
-                            mariageGratuitMontant = _uiState.value.mariageGratuitMontant
+                            mariageGratuitMontant = _uiState.value.mariageGratuitMontant,
+                            isOffline = true // All tickets are locally created first
                         )
                         
                         _uiState.value = _uiState.value.copy(
@@ -801,18 +810,14 @@ class VenteViewModel @Inject constructor(
                 } else {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "Erreur serveur"
+                        error = "Erreur création ticket: ${response.code()}"
                     )
                 }
             } catch (e: Exception) {
-                if (e is java.io.IOException) {
-                    createTicketOffline(tirageId, apiLines)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Erreur: ${e.message}"
-                    )
-                }
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Erreur: ${e.message}"
+                )
             }
         }
     }
@@ -879,8 +884,12 @@ class VenteViewModel @Inject constructor(
                 return@launch
             }
 
-            if (!networkMonitor.isCurrentlyOnline()) {
-                createMultiTicketsOffline(selectedIds, entries, triggerShareOnly = true)
+            // Phase 3: Gate check
+            if (!offlineLimitEnforcer.isAllowedToSell()) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = offlineLimitEnforcer.getBlockMessage()
+                )
                 return@launch
             }
 
@@ -895,6 +904,7 @@ class VenteViewModel @Inject constructor(
                     sessionKey = sessionKey
                 )
 
+                // Phase 3: All ticket creations are local-first
                 val response = ticketRepository.createMultiTicket(request)
                 
                 if (response.isSuccessful) {
@@ -926,7 +936,8 @@ class VenteViewModel @Inject constructor(
                             agentName = _uiState.value.agentName,
                             ticketFooterText = _uiState.value.ticketFooterText,
                             mariageGratuitActif = _uiState.value.mariageGratuitActif,
-                            mariageGratuitMontant = _uiState.value.mariageGratuitMontant
+                            mariageGratuitMontant = _uiState.value.mariageGratuitMontant,
+                            isOffline = true // Always local-first
                         )
                         
                         _uiState.value = _uiState.value.copy(
@@ -945,213 +956,19 @@ class VenteViewModel @Inject constructor(
                 } else {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "Erreur serveur: ${response.code()}",
+                        error = "Erreur création tickets: ${response.code()}",
                         creationProgress = null
                     )
                 }
             } catch (e: Exception) {
-                if (e is java.io.IOException) {
-                    createMultiTicketsOffline(selectedIds, entries, triggerShareOnly = true)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Erreur: ${e.message}",
-                        creationProgress = null
-                    )
-                }
-            }
-        }
-    }
-
-    private suspend fun createTicketOffline(tirageId: Int, apiLines: List<TicketLine>) {
-        try {
-            // Try to find tirage in current state or cached tirages
-            val tirage = _uiState.value.availableTirages.find { it.id == tirageId }
-                ?: agentConfigDataStore.getCachedTirages().find { it.id == tirageId }
-            
-            if (tirage == null) {
-                _uiState.value = _uiState.value.copy(isLoading = false, error = "Tirage non trouvé pour mode hors-ligne")
-                return
-            }
-            
-            val dummyTicketInfo = saveTicketOffline(tirage, apiLines)
-            
-            val secureInstant = java.time.Instant.ofEpochMilli(com.gaboom.agent.data.clock.SecuredClock.now())
-            val secureDateTime = java.time.LocalDateTime.ofInstant(secureInstant, java.time.ZoneId.systemDefault())
-            val shareInfo = TicketShareInfo(
-                ticketNo = dummyTicketInfo.ticketNo,
-                tirageNom = dummyTicketInfo.tirageNom,
-                date = secureDateTime.toLocalDate().toString(),
-                time = secureDateTime.toLocalTime().toString().take(5),
-                lines = apiLines.map { "${it.jeu}:${it.valeur}:${it.option}" to it.mise },
-                totalMise = dummyTicketInfo.totalMise,
-                groupId = null,
-                ticketId = dummyTicketInfo.ticketId,
-                borletteName = _uiState.value.borletteName,
-                borletteSlogan = _uiState.value.borletteSlogan,
-                borletteTel = _uiState.value.borletteTel,
-                borletteAdresse = _uiState.value.borletteAdresse,
-                borletteLogoUrl = _uiState.value.borletteLogoUrl,
-                agentName = _uiState.value.agentName,
-                ticketFooterText = _uiState.value.ticketFooterText,
-                mariageGratuitActif = _uiState.value.mariageGratuitActif,
-                mariageGratuitMontant = _uiState.value.mariageGratuitMontant,
-                isOffline = true
-            )
-            
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                ticketCreated = true,
-                ticketToShare = shareInfo,
-                error = "Ticket créé hors ligne (HL)"
-            )
-            
-            // Offline printing support
-            val allowOfflinePrint = agentConfigDataStore.getAllowOfflinePrint()
-            if (allowOfflinePrint) {
-                val printData = buildOfflinePrintData(dummyTicketInfo, apiLines)
-                printer.printTicket(printData)
-            }
-        } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(isLoading = false, error = "Erreur hors-ligne: ${e.message}")
-        }
-    }
-
-    private suspend fun createMultiTicketsOffline(selectedIds: List<Int>, entries: List<MultiTicketEntry>, triggerShareOnly: Boolean = false) {
-        try {
-            // Try current state first, fall back to cached tirages
-            val currentTirages = _uiState.value.availableTirages.filter { it.id in selectedIds }
-            val cachedTirages = if (currentTirages.size < selectedIds.size) {
-                agentConfigDataStore.getCachedTirages().filter { it.id in selectedIds }
-            } else emptyList()
-            val selectedTirages = if (currentTirages.size == selectedIds.size) currentTirages else cachedTirages
-            if (selectedTirages.isEmpty()) {
-                _uiState.value = _uiState.value.copy(isLoading = false, error = "Tirages non disponibles pour mode hors-ligne")
-                return
-            }
-            val createdOffline = mutableListOf<CreatedTicketInfo>()
-            
-            selectedTirages.forEach { tirage ->
-                val offlineInfo = saveTicketOffline(
-                    tirage = tirage,
-                    apiLines = entries.map { TicketLine(jeu = it.game, valeur = it.number, mise = it.stake, gratuit = it.gratuit, option = it.option ?: 1) }
-                )
-                createdOffline.add(offlineInfo)
-            }
-            
-            val secureInstant = java.time.Instant.ofEpochMilli(com.gaboom.agent.data.clock.SecuredClock.now())
-            val secureDateTime = java.time.LocalDateTime.ofInstant(secureInstant, java.time.ZoneId.systemDefault())
-            val firstTicket = createdOffline.first()
-            val tirageNames = createdOffline.joinToString(", ") { tirage -> tirage.tirageNom }
-            val shareInfo = TicketShareInfo(
-                ticketNo = if (createdOffline.size > 1) "${createdOffline.size} tickets" else firstTicket.ticketNo,
-                tirageNom = tirageNames,
-                date = secureDateTime.toLocalDate().toString(),
-                time = secureDateTime.toLocalTime().toString().take(5),
-                lines = entries.map { "${it.game}:${it.number}:${it.option ?: 1}" to it.stake },
-                totalMise = createdOffline.sumOf { it.totalMise },
-                groupId = firstTicket.ticketId,
-                ticketId = firstTicket.ticketId,
-                borletteName = _uiState.value.borletteName,
-                borletteSlogan = _uiState.value.borletteSlogan,
-                borletteTel = _uiState.value.borletteTel,
-                borletteAdresse = _uiState.value.borletteAdresse,
-                borletteLogoUrl = _uiState.value.borletteLogoUrl,
-                agentName = _uiState.value.agentName,
-                ticketFooterText = _uiState.value.ticketFooterText,
-                mariageGratuitActif = _uiState.value.mariageGratuitActif,
-                mariageGratuitMontant = _uiState.value.mariageGratuitMontant,
-                isOffline = true
-            )
-            
-            val allowOfflinePrint = agentConfigDataStore.getAllowOfflinePrint()
-            if (allowOfflinePrint && !triggerShareOnly) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    createdTickets = createdOffline,
-                    currentPrintIndex = 0,
-                    ticketCreated = false, // Keep false while printing!
-                    ticketToShare = shareInfo,
-                    error = "Tickets créés hors ligne (${createdOffline.size})"
-                )
-                printCurrentTicketMulti()
-            } else {
-                _uiState.value = _uiState.value.copy(
-                    isLoading = false,
-                    createdTickets = createdOffline,
-                    currentPrintIndex = 0,
-                    ticketCreated = true,
-                    ticketToShare = shareInfo,
-                    error = "Tickets créés hors ligne (${createdOffline.size})"
+                    error = "Erreur: ${e.message}",
+                    creationProgress = null
                 )
             }
-        } catch (e: Exception) {
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                creationProgress = null,
-                error = "Erreur hors-ligne multiple: ${e.message}"
-            )
         }
     }
-
-    private suspend fun saveTicketOffline(
-        tirage: Tirage,
-        apiLines: List<TicketLine>
-    ): CreatedTicketInfo {
-        val totalMise = apiLines.sumOf { it.mise }
-        val localId = UUID.randomUUID().toString()
-        val localTicketNo = if (com.gaboom.agent.data.config.FeatureFlags.isEnabled("OFFLINE_ENGINE_V2")) {
-            val seq = agentConfigDataStore.getAndIncrementTicketNumber()
-            val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
-            "CB-$year-$seq"
-        } else {
-            "HL-${localId.take(8).uppercase()}"
-        }
-        
-        val request = MultiTicketCreateRequest(
-            tirageIds = listOf(tirage.id),
-            entries = apiLines.map { MultiTicketEntry(game = it.jeu, number = it.valeur, stake = it.mise, gratuit = it.gratuit, option = if (it.option > 0) it.option else null) },
-            sessionKey = tirage.sessionKey
-        )
-        
-        val payloadJson = gson.toJson(request)
-        val linesSummary = apiLines.take(5).joinToString(", ") { "${it.jeu}:${it.valeur}" } + 
-                           if (apiLines.size > 5) "..." else ""
-                           
-         val deviceCreds = agentConfigDataStore.getDeviceCredentials()
-         val hmacSignature = if (deviceCreds != null) {
-             HmacUtil.signPayload(
-                 deviceSecret = deviceCreds.deviceSecret,
-                 payloadJson = payloadJson,
-                 sessionKey = tirage.sessionKey ?: ""
-             )
-         } else null
-         
-         val pendingTicket = PendingTicketEntity(
-             id = localId,
-             payloadJson = payloadJson,
-             tirageIds = tirage.id.toString(),
-             tirageId = tirage.id,
-             sessionKey = tirage.sessionKey,
-             totalMise = totalMise,
-             linesSummary = linesSummary,
-             syncStatus = SyncStatus.PENDING,
-             hmacSignature = hmacSignature,
-             localTicketNo = localTicketNo
-         )
-         pendingTicketDao.insert(pendingTicket)
-         
-         return CreatedTicketInfo(
-             ticketId = localId,
-             ticketNo = localTicketNo,
-             tirageId = tirage.id,
-             tirageNom = tirage.nom,
-             totalMise = totalMise,
-             isOffline = true,
-             signature = hmacSignature,
-             hash = hmacSignature
-         )
-     }
 
     private fun buildOfflinePrintData(ticket: CreatedTicketInfo, apiLines: List<TicketLine>): PrintData {
         val lines = apiLines.map { line ->
@@ -1412,8 +1229,12 @@ class VenteViewModel @Inject constructor(
                 return@launch
             }
 
-            if (!networkMonitor.isCurrentlyOnline()) {
-                createMultiTicketsOffline(selectedIds, entries, triggerShareOnly = false)
+            // Phase 3: Gate check
+            if (!offlineLimitEnforcer.isAllowedToSell()) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = offlineLimitEnforcer.getBlockMessage()
+                )
                 return@launch
             }
 
@@ -1428,6 +1249,7 @@ class VenteViewModel @Inject constructor(
                     sessionKey = sessionKey
                 )
 
+                // Phase 3: All ticket creations are local-first (see TicketRepository)
                 val response = ticketRepository.createMultiTicket(request)
                 
                 if (response.isSuccessful) {
@@ -1436,18 +1258,14 @@ class VenteViewModel @Inject constructor(
                 } else {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        error = "Erreur serveur: ${response.code()}"
+                        error = "Erreur création ticket: ${response.code()}"
                     )
                 }
             } catch (e: Exception) {
-                if (e is java.io.IOException) {
-                    createMultiTicketsOffline(selectedIds, entries, triggerShareOnly = false)
-                } else {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Erreur: ${e.message}"
-                    )
-                }
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Erreur: ${e.message}"
+                )
             }
         }
     }

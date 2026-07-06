@@ -46,14 +46,19 @@ data class SyncUiState(
     val pendingCount: Int = 0,
     val failedCount: Int = 0,
     val successMessage: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
+    val offlineGateState: com.gaboom.agent.data.sync.SaleGateState = com.gaboom.agent.data.sync.SaleGateState(),
+    val clockDriftSeconds: Long? = null,
+    val isClockTrusted: Boolean = false
 )
 
 @HiltViewModel
 class SyncViewModel @Inject constructor(
     private val syncManager: SyncManager,
     private val pendingTicketDao: PendingTicketDao,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val offlineLimitEnforcer: com.gaboom.agent.data.sync.OfflineLimitEnforcer,
+    private val clockHistoryDao: com.gaboom.agent.data.local.ClockHistoryDao
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(SyncUiState())
@@ -64,12 +69,31 @@ class SyncViewModel @Inject constructor(
         observePendingTickets()
         observeSyncState()
         observeSyncEvents()
+        observeOfflineGate()
+        observeClockConfidence()
     }
 
     private fun observeNetworkStatus() {
         viewModelScope.launch {
             networkMonitor.isOnline.collect { isOnline ->
                 _uiState.update { it.copy(isOnline = isOnline) }
+            }
+        }
+    }
+
+    private fun observeOfflineGate() {
+        viewModelScope.launch {
+            offlineLimitEnforcer.gateState.collect { gateState ->
+                _uiState.update { it.copy(offlineGateState = gateState, clockDriftSeconds = gateState.clockDriftSeconds) }
+            }
+        }
+    }
+
+    private fun observeClockConfidence() {
+        viewModelScope.launch {
+            clockHistoryDao.getLatestSyncFlow().collect { syncEvent ->
+                val isTrusted = syncEvent != null && syncEvent.confidence == "HIGH"
+                _uiState.update { it.copy(isClockTrusted = isTrusted) }
             }
         }
     }

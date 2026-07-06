@@ -42,6 +42,10 @@ object FeatureFlags {
     const val RUST_VALIDATOR = true
     const val CICD_VALIDATION_ENABLED = true
     const val AUTO_BACKUP_ENABLED = true
+    // Phase 3 — Local-First Architecture
+    const val LOCAL_FIRST_ENGINE = true
+    const val HEARTBEAT_ENFORCER = true
+    const val TICKET_EXPIRY_95D = true
 
     /**
      * Vérifie si une fonctionnalité est activée dynamiquement par son nom de clé.
@@ -85,6 +89,9 @@ object FeatureFlags {
             "DISTRIBUTED_TRACE_ENABLED" -> DISTRIBUTED_TRACE_ENABLED
             "CICD_VALIDATION_ENABLED" -> CICD_VALIDATION_ENABLED
             "AUTO_BACKUP_ENABLED" -> AUTO_BACKUP_ENABLED
+            "LOCAL_FIRST_ENGINE" -> LOCAL_FIRST_ENGINE
+            "HEARTBEAT_ENFORCER" -> HEARTBEAT_ENFORCER
+            "TICKET_EXPIRY_95D" -> TICKET_EXPIRY_95D
             else -> false
         }
     }

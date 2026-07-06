@@ -1904,7 +1904,12 @@ def api_agent_heartbeat(request: HttpRequest) -> JsonResponse:
         
     agent.save(update_fields=update_fields)
     
-    return _json_success({"status": "ok", "timestamp": agent.last_seen_at.isoformat()})
+    response_data = {
+        "status": "ok",
+        "timestamp": agent.last_seen_at.isoformat(),
+        "server_timestamp_ms": int(timezone.now().timestamp() * 1000)
+    }
+    return _json_success(response_data)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

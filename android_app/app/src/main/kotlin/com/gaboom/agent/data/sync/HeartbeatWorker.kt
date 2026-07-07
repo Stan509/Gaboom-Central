@@ -70,7 +70,7 @@ class HeartbeatWorker @AssistedInject constructor(
                         }
                     }
 
-                    // Record successful contact (clears maintenance flag)
+                    // Record successful contact (clears maintenance flag) and recompute gate state
                     offlineLimitEnforcer.recordServerContact()
 
                     // Check if range needs extension
@@ -91,6 +91,8 @@ class HeartbeatWorker @AssistedInject constructor(
                 response.code() == 401 -> {
                     // Not authenticated — not a connectivity issue; don't penalize offline timer
                     Log.d(TAG, "Heartbeat 401 — session expired, skipping offline timer update")
+                    // Still recompute to ensure gate state is current
+                    offlineLimitEnforcer.recompute()
                     Result.success()
                 }
 

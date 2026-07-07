@@ -17,6 +17,9 @@ private const val MAX_OFFLINE_MS = 25L * 60L * 1000L
 /** 2 minutes max clock drift allowed */
 private const val MAX_CLOCK_DRIFT_MS = 2L * 60L * 1000L
 
+/** Grace period after first server contact (2 minutes) */
+private const val GRACE_PERIOD_MS = 2L * 60L * 1000L
+
 /**
  * Reason why ticket creation is blocked.
  */
@@ -48,6 +51,7 @@ data class SaleGateState(
  * - Blocks sales if server has been unreachable for > 25 minutes AND server is NOT in maintenance.
  * - Blocks NEW ticket creation if clock drift exceeds 120 seconds (already-created tickets unaffected).
  * - Never blocks if server is responding with HTTP 503 / maintenance mode.
+ * - Grace period of 2 minutes after first server contact to allow heartbeat to establish.
  */
 @Singleton
 class OfflineLimitEnforcer @Inject constructor(
@@ -59,6 +63,7 @@ class OfflineLimitEnforcer @Inject constructor(
 
     /**
      * Call this after every successful server response (including heartbeat).
+     * Automatically calls recompute().
      */
     suspend fun recordServerContact() {
         agentConfigDataStore.updateServerContact()
@@ -95,8 +100,19 @@ class OfflineLimitEnforcer @Inject constructor(
             return
         }
 
-        // ── No contact yet ────────────────────────────────────────────────────
+        // ── No contact yet: grace period ──────────────────────────────────────
         if (lastContact == 0L) {
+            // Allow sales for GRACE_PERIOD_MS after app start to let heartbeat establish
+            val appStartTime = agentConfigDataStore.getAppStartTime()
+            val elapsedSinceStart = now - appStartTime
+            if (appStartTime > 0L && elapsedSinceStart < GRACE_PERIOD_MS) {
+                Log.d(TAG, "Grace period active (${elapsedSinceStart / 1000}s since start). Allowing sales.")
+                _gateState.value = SaleGateState(
+                    reason = SaleBlockedReason.NONE,
+                    minutesBeforeBlock = 25
+                )
+                return
+            }
             Log.w(TAG, "No server contact ever recorded")
             _gateState.value = SaleGateState(reason = SaleBlockedReason.NO_SERVER_CONTACT)
             return

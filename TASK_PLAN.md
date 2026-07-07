@@ -1,23 +1,41 @@
-# Plan d'implémentation
+# Plan de Correction: Synchronisation des Tickets (Local-First - V2.9.7) - COMPLÉTÉ
 
-## 1. Système de code de confirmation (Inscription)
-- Déjà existant dans `accounts/signup_api.py` (génère code 6 chiffres, envoie email)
-- ✅ Fonctionnel: génération de token, email HTML, vérification
+## Résumé des Corrections
 
-## 2. Système de récupération de compte/mot de passe (NOUVEAU)
-- Créer API endpoint `POST /api/request-password-reset/` → génère code, l'envoie par email
-- Créer API endpoint `POST /api/reset-password/` → vérifie code + expire, réinitialise mot de passe
-- Email HTML pour la récupération de mot de passe
+### ✅ 1. GaboomAgentApp - Initialisation au démarrage
+- `OfflineLimitEnforcer` injecté et initialisé au démarrage (`recompute()` après 1s)
+- `SyncManager` injecté directement (plus via `Provider`) pour initialisation immédiate
+- Sync déclenché au démarrage si des tickets sont en attente
+- Boucle périodique de recompute toutes les 2 minutes
 
-## 3. Correction Erreur 500 sur voir agent
-- Analyser la vue `agent_detail` - problème potentiel: `request.user.borlette` 
-- Problème: `_require_admin` utilise `get_user_borlette()` qui attrape les exceptions, mais `agent_detail` utilise `request.user.borlette` directement ce qui peut lancer une exception `RelatedObjectDoesNotExist`
+### ✅ 2. OfflineLimitEnforcer - Temps de grâce
+- Ajout de `GRACE_PERIOD_MS = 2 minutes` après le démarrage de l'app
+- Si `lastContact == 0` mais app démarrée depuis < 2 min, ne pas bloquer
+- `getAppStartTime()` / `setAppStartTime()` ajouté à `AgentConfigDataStore`
+- `recordServerContact()` appelle automatiquement `recompute()`
 
-## 4. Carte Leaflet localisation agent
-- Vérifier si les fichiers statiques Leaflet existent (CSS/JS)
-- Si non, utiliser CDN directement
-- S'assurer que les coordonnées GPS sont bien envoyées dans l'API stats
+### ✅ 3. SyncManager - Sync périodique
+- Boucle périodique toutes les 5 minutes pour relancer le sync si tickets en attente
+- Même mécanisme d'auto-sync au retour réseau préservé
 
-## 5. Templates email
-- Template HTML pour code de vérification
-- Template HTML pour récupération mot de passe
+### ✅ 4. HeartbeatWorker - Recompute après chaque appel
+- `offlineLimitEnforcer.recompute()` appelé dans tous les cas (succès, 401, erreur, exception)
+
+### ✅ 5. Numéro de version
+- Version bump: 2.9.6 → 2.9.7 (versionCode 35 → 36)
+- Landing page mise à jour (v2.9.7)
+- APK en cours de build...
+
+### 🔄 En cours
+- Build APK (assembleRelease) - ~82%
+- Copie APK vers static/
+- Git commit
+
+## Fichiers modifiés
+1. `android_app/app/src/main/kotlin/com/gaboom/agent/GaboomAgentApp.kt` - Initialisation complète
+2. `android_app/app/src/main/kotlin/com/gaboom/agent/data/sync/OfflineLimitEnforcer.kt` - Grace period
+3. `android_app/app/src/main/kotlin/com/gaboom/agent/data/config/AgentConfigDataStore.kt` - App start time
+4. `android_app/app/src/main/kotlin/com/gaboom/agent/data/sync/SyncManager.kt` - Periodic sync
+5. `android_app/app/src/main/kotlin/com/gaboom/agent/data/sync/HeartbeatWorker.kt` - Recompute on all paths
+6. `android_app/app/build.gradle.kts` - Version bump
+7. `templates/landing/index.html` - Version display update

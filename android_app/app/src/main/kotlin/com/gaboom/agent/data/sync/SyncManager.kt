@@ -111,6 +111,18 @@ class SyncManager @Inject constructor(
                 _syncState.update { it.copy(pendingCount = pending, failedCount = failed) }
             }
         }
+        
+        // Periodic sync every 5 minutes to ensure pending tickets are sent
+        scope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(5 * 60 * 1000L) // 5 minutes
+                val currentPending = _syncState.value.pendingCount
+                if (currentPending > 0 && networkMonitor.isCurrentlyOnline()) {
+                    Log.d(TAG, "Periodic sync triggered: $currentPending pending tickets")
+                    syncPendingTickets()
+                }
+            }
+        }
     }
     
     /**

@@ -245,6 +245,18 @@ class AgentConfigDataStore @Inject constructor(
         return dataStore.data.map { prefs -> prefs[SERVER_IN_MAINTENANCE] ?: false }.first()
     }
 
+    // ─── App Start Time (for grace period) ───────────────────────────────────
+
+    suspend fun setAppStartTime(timeMs: Long) {
+        dataStore.edit { prefs ->
+            prefs[longPreferencesKey("app_start_time")] = timeMs
+        }
+    }
+
+    suspend fun getAppStartTime(): Long {
+        return dataStore.data.map { prefs -> prefs[longPreferencesKey("app_start_time")] ?: 0L }.first()
+    }
+
     // ─── Clear All ─────────────────────────────────────────────────────────────
 
     suspend fun clearAll() {

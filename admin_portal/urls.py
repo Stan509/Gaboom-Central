@@ -67,6 +67,7 @@ urlpatterns = [
     path("api/agents/<int:agent_id>/ledger/", agent_api.api_agent_ledger, name="api_agent_ledger"),
     path("api/agents/<int:agent_id>/adjustment/", agent_api.api_agent_adjustment, name="api_agent_adjustment"),
     path("api/agents/<int:agent_id>/performance/", agent_api.api_agent_performance, name="api_agent_performance"),
+    path("api/agents/<int:agent_id>/location-history/", agent_api.api_agent_location_history, name="api_agent_location_history"),
     # API Résultats & Tickets (Phase B)
     path("api/tirages/results_status/", results_api.api_tirages_results_status, name="api_tirages_results_status"),
     path("api/tirages/<int:tirage_id>/results/", results_api.api_tirage_results, name="api_tirage_results"),

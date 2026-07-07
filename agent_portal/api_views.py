@@ -1899,8 +1899,17 @@ def api_agent_heartbeat(request: HttpRequest) -> JsonResponse:
                 agent.longitude = Decimal(str(lng))
                 agent.last_location_updated_at = timezone.now()
                 update_fields.extend(["latitude", "longitude", "last_location_updated_at"])
-    except Exception:
-        pass
+                
+                # Save to history for tracking mode
+                from accounts.models import AgentLocationHistory
+                AgentLocationHistory.objects.create(
+                    agent=agent,
+                    latitude=agent.latitude,
+                    longitude=agent.longitude
+                )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Heartbeat error: {e}")
         
     agent.save(update_fields=update_fields)
     

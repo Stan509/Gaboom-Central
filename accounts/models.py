@@ -1500,3 +1500,22 @@ class SMTPSettings(models.Model):
     def __str__(self) -> str:
         return f"SMTP {self.smtp_host} ({self.smtp_username})"
 
+class AgentLocationHistory(models.Model):
+    """
+    Historique des positions GPS d'un agent pour le mode suivi/itinéraire.
+    """
+    agent = models.ForeignKey(Agent, on_delete=models.CASCADE, related_name="location_history")
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    timestamp = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["agent", "-timestamp"], name="idx_agent_loc_time"),
+            models.Index(fields=["timestamp"], name="idx_loc_time"),
+        ]
+        ordering = ["-timestamp"]
+
+    def __str__(self) -> str:
+        return f"Location {self.agent.nom} @ {self.timestamp}"
+

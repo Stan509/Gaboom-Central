@@ -187,8 +187,14 @@
   <!-- Localisation Map Section -->
   <div class="section" style="margin-bottom: 24px;">
     <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-      <h3>📍 Localisation de l'appareil</h3>
-      <span id="lastLocationTime" style="font-size: 12px; color: rgba(255,255,255,0.5);">Mise à jour: {{ agent.last_location_updated_at|default:"Jamais" }}</span>
+      <div style="display: flex; align-items: center; gap: 12px;">
+          <h3>📍 Localisation de l'appareil</h3>
+          <button id="toggleTrackingBtn" class="btn" style="padding: 4px 10px; font-size: 11px; background: rgba(58,160,255,0.2); border: 1px solid rgba(58,160,255,0.5); border-radius: 6px; color: #fff; cursor: pointer;">🗺️ Activer Itinéraire</button>
+      </div>
+      <div style="text-align: right;">
+          <span id="lastLocationTime" style="font-size: 12px; color: rgba(255,255,255,0.5); display: block;">Mise à jour: {{ agent.last_location_updated_at|default:"Jamais" }}</span>
+          <span id="trackingDistance" style="font-size: 12px; color: #10b981; display: none; font-weight: bold; margin-top: 4px;">Distance: 0.00 km</span>
+      </div>
     </div>
     <div id="map" style="height: 280px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); width: 100%;">
       <div class="map-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(255,255,255,0.4);font-size:14px;">
@@ -232,6 +238,8 @@
 
   let map;
   let marker;
+  let polyline;
+  let trackingMode = false;
 
   function initMap() {
     const mapEl = document.getElementById('map');
@@ -269,18 +277,82 @@
       }
       
       const newLatLng = new L.LatLng(lat, lng);
+      
+      // Icône personnalisée
+      const iconHtml = `<span style="background-color: #3aa0ff; width: 14px; height: 14px; display: block; position: relative; border-radius: 50%; border: 2px solid #ffffff; box-shadow: 0 0 8px rgba(0,0,0,0.4);" />`;
+      const customIcon = L.divIcon({ className: "custom-pin", iconAnchor: [9, 9], popupAnchor: [0, -10], html: iconHtml });
+      
       if (!marker) {
-        marker = L.marker(newLatLng).addTo(map)
+        marker = L.marker(newLatLng, { icon: customIcon }).addTo(map)
           .bindPopup("{{ agent.nom }} est ici")
           .openPopup();
       } else {
         marker.setLatLng(newLatLng);
+        marker.setIcon(customIcon);
       }
-      map.setView(newLatLng, 15);
+      
+      if (!trackingMode) {
+        map.setView(newLatLng, 15);
+      } else {
+        // En mode suivi, on rafraîchit l'historique complet pour mettre à jour la ligne
+        loadTrackingHistory();
+      }
     } catch (err) {
       console.error("Leaflet map update failed:", err);
     }
   }
+
+  function loadTrackingHistory() {
+    fetch(`/portal/api/agents/${agentId}/location-history/`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.status !== "success" || !data.history) return;
+        
+        const latLngs = data.history.map(pt => new L.LatLng(pt.lat, pt.lng));
+        if (latLngs.length === 0) return;
+        
+        if (polyline) {
+          map.removeLayer(polyline);
+        }
+        
+        // Dessiner la ligne
+        polyline = L.polyline(latLngs, {color: '#ff4d6d', weight: 4, opacity: 0.8, dashArray: '5, 10'}).addTo(map);
+        map.fitBounds(polyline.getBounds(), { padding: [30, 30] });
+        
+        // Calculer la distance
+        let distance = 0;
+        for (let i = 1; i < latLngs.length; i++) {
+          distance += latLngs[i-1].distanceTo(latLngs[i]);
+        }
+        const distKm = (distance / 1000).toFixed(2);
+        
+        document.getElementById('trackingDistance').style.display = 'block';
+        document.getElementById('trackingDistance').textContent = `Parcours du jour : ${distKm} km`;
+      });
+  }
+
+  document.getElementById('toggleTrackingBtn').addEventListener('click', (e) => {
+    trackingMode = !trackingMode;
+    const btn = e.target;
+    if (trackingMode) {
+      btn.textContent = "🛑 Désactiver Itinéraire";
+      btn.style.background = "rgba(255,77,109,0.2)";
+      btn.style.borderColor = "rgba(255,77,109,0.5)";
+      loadTrackingHistory();
+    } else {
+      btn.textContent = "🗺️ Activer Itinéraire";
+      btn.style.background = "rgba(58,160,255,0.2)";
+      btn.style.borderColor = "rgba(58,160,255,0.5)";
+      document.getElementById('trackingDistance').style.display = 'none';
+      if (polyline) {
+        map.removeLayer(polyline);
+        polyline = null;
+      }
+      if (marker) {
+        map.setView(marker.getLatLng(), 15);
+      }
+    }
+  });
 
   function loadStats() {
     fetch(`/portal/api/agents/${agentId}/stats/`)

@@ -196,10 +196,18 @@
           <span id="trackingDistance" style="font-size: 12px; color: #10b981; display: none; font-weight: bold; margin-top: 4px;">Distance: 0.00 km</span>
       </div>
     </div>
-    <div id="map" style="height: 280px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); width: 100%;">
+    <div id="map" style="height: 280px; border-radius: 12px 12px 0 0; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); width: 100%;">
       <div class="map-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:rgba(255,255,255,0.4);font-size:14px;">
         Aucune coordonnée reçue pour le moment.
       </div>
+    </div>
+    <div style="display: flex; gap: 8px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-top: none; border-radius: 0 0 12px 12px;">
+      <button id="btnGoogleMaps" class="btn" style="flex: 1; display: none; justify-content: center; align-items: center; gap: 6px; background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); color: #10b981;">
+        📍 Ouvrir Itinéraire (G. Maps)
+      </button>
+      <button id="btnShareLocation" class="btn" style="flex: 1; display: none; justify-content: center; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8);">
+        🔗 Partager Position
+      </button>
     </div>
   </div>
 
@@ -296,6 +304,34 @@
       } else {
         // En mode suivi, on rafraîchit l'historique complet pour mettre à jour la ligne
         loadTrackingHistory();
+      }
+      
+      // Update action buttons
+      const btnGoogleMaps = document.getElementById('btnGoogleMaps');
+      const btnShareLocation = document.getElementById('btnShareLocation');
+      if (btnGoogleMaps && btnShareLocation) {
+        btnGoogleMaps.style.display = 'flex';
+        btnShareLocation.style.display = 'flex';
+        
+        const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+        
+        btnGoogleMaps.onclick = function() {
+          window.open(mapsUrl, '_blank');
+        };
+        
+        btnShareLocation.onclick = function() {
+          if (navigator.share) {
+            navigator.share({
+              title: `Position de {{ agent.nom }}`,
+              text: `Voici la dernière position GPS connue de {{ agent.nom }} :`,
+              url: mapsUrl
+            }).catch(console.error);
+          } else {
+            navigator.clipboard.writeText(mapsUrl).then(() => {
+              alert("Lien copié dans le presse-papier !");
+            });
+          }
+        };
       }
     } catch (err) {
       console.error("Leaflet map update failed:", err);

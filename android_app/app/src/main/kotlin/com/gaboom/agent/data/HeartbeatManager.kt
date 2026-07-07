@@ -7,6 +7,9 @@ import android.location.LocationListener
 import android.os.Bundle
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Handler
+import android.os.Looper
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.gaboom.agent.data.api.AgentApiService
 import com.gaboom.agent.data.model.HeartbeatRequest
@@ -29,10 +32,21 @@ class HeartbeatManager @Inject constructor(
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var lastLocation: Location? = null
     private var isLocationListenerRegistered = false
+    private var hasShownGpsFoundToast = false
 
     private val locationListener = object : LocationListener {
         override fun onLocationChanged(location: Location) {
             lastLocation = location
+            if (!hasShownGpsFoundToast) {
+                hasShownGpsFoundToast = true
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(context, "📍 Position GPS acquise avec succès !", Toast.LENGTH_LONG).show()
+                }
+            }
+            // Immediately queue the location for sync
+            scope.launch {
+                locationSyncManager.queueLocation(location.latitude, location.longitude)
+            }
         }
         @Deprecated("Deprecated in Java")
         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
@@ -86,38 +100,50 @@ class HeartbeatManager @Inject constructor(
         if (isLocationListenerRegistered) return
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(context, "⚠️ Permission GPS refusée, la localisation ne marchera pas.", Toast.LENGTH_LONG).show()
+            }
             return
         }
-        scope.launch(Dispatchers.Main) {
-            try {
-                val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return@launch
-                var registered = false
-                if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                    locationManager.requestLocationUpdates(
-                        LocationManager.GPS_PROVIDER,
-                        10_000L,
-                        0f, // 0 meters to force updates even when stationary
-                        locationListener,
-                        android.os.Looper.getMainLooper()
-                    )
-                    registered = true
-                }
-                if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                    locationManager.requestLocationUpdates(
-                        LocationManager.NETWORK_PROVIDER,
-                        10_000L,
-                        0f, // 0 meters to force updates even when stationary
-                        locationListener,
-                        android.os.Looper.getMainLooper()
-                    )
-                    registered = true
-                }
-                isLocationListenerRegistered = registered
-            } catch (e: SecurityException) {
-                // Ignore
-            } catch (e: Exception) {
-                android.util.Log.e("HeartbeatManager", "Error registering location listener: ${e.message}", e)
+        try {
+            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
+            
+            var registered = false
+            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    10_000L,
+                    0f, // 0 meters to force updates even when stationary
+                    locationListener,
+                    android.os.Looper.getMainLooper()
+                )
+                registered = true
             }
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                locationManager.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    10_000L,
+                    0f, // 0 meters to force updates even when stationary
+                    locationListener,
+                    android.os.Looper.getMainLooper()
+                )
+                registered = true
+            }
+            isLocationListenerRegistered = registered
+            
+            if (registered && lastLocation == null) {
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(context, "⏳ Recherche de la position GPS en cours... (allez à l'extérieur si nécessaire)", Toast.LENGTH_LONG).show()
+                }
+            } else if (!registered) {
+                Handler(Looper.getMainLooper()).post {
+                    Toast.makeText(context, "⚠️ GPS désactivé sur le téléphone !", Toast.LENGTH_LONG).show()
+                }
+            }
+        } catch (e: SecurityException) {
+            // Ignore
+        } catch (e: Exception) {
+            android.util.Log.e("HeartbeatManager", "Error registering location listener: ${e.message}", e)
         }
     }
 

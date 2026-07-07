@@ -11,7 +11,7 @@ from django.db import models, transaction
 from django.http import HttpRequest, JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 
 from accounts.models import Agent, UserRole
 
@@ -353,3 +353,36 @@ def api_agent_adjustment(request: HttpRequest, agent_id: int) -> JsonResponse:
         "entry_id": str(entry.id),
         "new_balance": float(new_stats["balance"]),
     })
+
+@require_http_methods(["GET"])
+def api_agent_location_history(request: HttpRequest, agent_id: int) -> JsonResponse:
+    auth_err = _require_admin_api(request)
+    if auth_err:
+        return auth_err
+
+    try:
+        agent = Agent.objects.get(id=agent_id, borlette=request.user.admin_profile.borlette)
+        
+        from accounts.models import AgentLocationHistory
+        from django.utils import timezone
+        
+        today = timezone.now().date()
+        history = AgentLocationHistory.objects.filter(
+            agent=agent,
+            timestamp__date=today
+        ).order_by("timestamp")
+        
+        data = [
+            {
+                "lat": float(h.latitude),
+                "lng": float(h.longitude),
+                "time": h.timestamp.isoformat()
+            }
+            for h in history
+        ]
+        
+        return JsonResponse({"status": "success", "history": data})
+    except Agent.DoesNotExist:
+        return JsonResponse({"status": "error", "message": "Agent non trouvé."}, status=404)
+    except Exception as e:
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)

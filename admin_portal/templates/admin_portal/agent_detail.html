@@ -202,10 +202,10 @@
       </div>
     </div>
     <div style="display: flex; gap: 8px; padding: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-top: none; border-radius: 0 0 12px 12px;">
-      <button id="btnGoogleMaps" class="btn" style="flex: 1; display: none; justify-content: center; align-items: center; gap: 6px; background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); color: #10b981;">
+      <button id="btnGoogleMaps" class="btn" style="flex: 1; display: flex; justify-content: center; align-items: center; gap: 6px; background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.3); color: #10b981;">
         📍 Ouvrir Itinéraire (G. Maps)
       </button>
-      <button id="btnShareLocation" class="btn" style="flex: 1; display: none; justify-content: center; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8);">
+      <button id="btnShareLocation" class="btn" style="flex: 1; display: flex; justify-content: center; align-items: center; gap: 6px; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8);">
         🔗 Partager Position
       </button>
     </div>
@@ -277,18 +277,57 @@
       document.getElementById('lastLocationTime').textContent = `Mise à jour: ${formattedTime}`;
     }
 
+    const btnGoogleMaps = document.getElementById('btnGoogleMaps');
+    const btnShareLocation = document.getElementById('btnShareLocation');
+    const toggleTrackingBtn = document.getElementById('toggleTrackingBtn');
+
     try {
-      if (!lat || !lng) return;
-      
       if (!map) {
         initMap();
+      }
+
+      if (!lat || !lng) {
+        // Disable buttons if no GPS
+        if (btnGoogleMaps) {
+          btnGoogleMaps.style.opacity = '0.5';
+          btnGoogleMaps.style.cursor = 'not-allowed';
+          btnGoogleMaps.title = 'Aucune coordonnée GPS';
+          btnGoogleMaps.onclick = null;
+        }
+        if (btnShareLocation) {
+          btnShareLocation.style.opacity = '0.5';
+          btnShareLocation.style.cursor = 'not-allowed';
+          btnShareLocation.title = 'Aucune coordonnée GPS';
+          btnShareLocation.onclick = null;
+        }
+        if (toggleTrackingBtn) {
+          toggleTrackingBtn.style.opacity = '0.5';
+          toggleTrackingBtn.style.pointerEvents = 'none';
+        }
+        return;
+      }
+      
+      // Enable buttons if GPS is present
+      if (btnGoogleMaps) {
+        btnGoogleMaps.style.opacity = '1';
+        btnGoogleMaps.style.cursor = 'pointer';
+        btnGoogleMaps.title = '';
+      }
+      if (btnShareLocation) {
+        btnShareLocation.style.opacity = '1';
+        btnShareLocation.style.cursor = 'pointer';
+        btnShareLocation.title = '';
+      }
+      if (toggleTrackingBtn) {
+        toggleTrackingBtn.style.opacity = '1';
+        toggleTrackingBtn.style.pointerEvents = 'auto';
       }
       
       const newLatLng = new L.LatLng(lat, lng);
       
       // Icône personnalisée
-      const iconHtml = `<span style="background-color: #3aa0ff; width: 14px; height: 14px; display: block; position: relative; border-radius: 50%; border: 2px solid #ffffff; box-shadow: 0 0 8px rgba(0,0,0,0.4);" />`;
-      const customIcon = L.divIcon({ className: "custom-pin", iconAnchor: [9, 9], popupAnchor: [0, -10], html: iconHtml });
+      const iconHtml = `<span style="background-color: #3aa0ff; width: 14px; height: 14px; display: block; position: relative; border-radius: 50%; border: 2px solid #ffffff; box-shadow: 0 0 8px rgba(0,0,0,0.4);"></span>`;
+      const customIcon = L.divIcon({ className: "custom-pin", iconAnchor: [7, 7], popupAnchor: [0, -10], html: iconHtml });
       
       if (!marker) {
         marker = L.marker(newLatLng, { icon: customIcon }).addTo(map)
@@ -306,13 +345,8 @@
         loadTrackingHistory();
       }
       
-      // Update action buttons
-      const btnGoogleMaps = document.getElementById('btnGoogleMaps');
-      const btnShareLocation = document.getElementById('btnShareLocation');
+      // Update action buttons logic
       if (btnGoogleMaps && btnShareLocation) {
-        btnGoogleMaps.style.display = 'flex';
-        btnShareLocation.style.display = 'flex';
-        
         const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
         
         btnGoogleMaps.onclick = function() {

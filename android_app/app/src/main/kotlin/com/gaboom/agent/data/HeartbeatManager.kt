@@ -96,7 +96,7 @@ class HeartbeatManager @Inject constructor(
                     locationManager.requestLocationUpdates(
                         LocationManager.GPS_PROVIDER,
                         10_000L,
-                        10f,
+                        0f, // 0 meters to force updates even when stationary
                         locationListener,
                         android.os.Looper.getMainLooper()
                     )
@@ -106,7 +106,7 @@ class HeartbeatManager @Inject constructor(
                     locationManager.requestLocationUpdates(
                         LocationManager.NETWORK_PROVIDER,
                         10_000L,
-                        10f,
+                        0f, // 0 meters to force updates even when stationary
                         locationListener,
                         android.os.Looper.getMainLooper()
                     )

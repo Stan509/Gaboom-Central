@@ -361,7 +361,7 @@ def api_agent_location_history(request: HttpRequest, agent_id: int) -> JsonRespo
         return auth_err
 
     try:
-        agent = Agent.objects.get(id=agent_id, borlette=request.user.admin_profile.borlette)
+        agent = Agent.objects.get(id=agent_id, borlette=get_user_borlette(request.user))
         
         from accounts.models import AgentLocationHistory
         from django.utils import timezone

@@ -292,13 +292,17 @@
           btnGoogleMaps.style.opacity = '0.5';
           btnGoogleMaps.style.cursor = 'not-allowed';
           btnGoogleMaps.title = 'Aucune coordonnée GPS';
-          btnGoogleMaps.onclick = null;
+          btnGoogleMaps.onclick = function() {
+            alert("Impossible d'ouvrir l'itinéraire : L'appareil Android de l'agent n'a pas encore envoyé ses coordonnées GPS au serveur.");
+          };
         }
         if (btnShareLocation) {
           btnShareLocation.style.opacity = '0.5';
           btnShareLocation.style.cursor = 'not-allowed';
           btnShareLocation.title = 'Aucune coordonnée GPS';
-          btnShareLocation.onclick = null;
+          btnShareLocation.onclick = function() {
+            alert("Impossible de partager la position : L'appareil Android de l'agent n'a pas encore envoyé ses coordonnées GPS au serveur.");
+          };
         }
         if (toggleTrackingBtn) {
           toggleTrackingBtn.style.opacity = '0.5';

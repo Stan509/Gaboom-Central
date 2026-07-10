@@ -59,14 +59,23 @@ class HeartbeatWorker @AssistedInject constructor(
                     Log.d(TAG, "Heartbeat OK — server status=${body?.status}")
 
                     // Sync clock from response timestamp header or body
-                    val serverDateHeader = response.headers()["Date"]
-                    if (serverDateHeader != null) {
+                    val serverTimeHeader = response.headers()["Server-Time"]
+                    if (serverTimeHeader != null) {
                         try {
-                            val sdf = java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US)
-                            val parsed = sdf.parse(serverDateHeader)?.time
-                            if (parsed != null) SecuredClock.update(parsed)
+                            SecuredClock.update(serverTimeHeader.toLong())
                         } catch (e: Exception) {
-                            Log.w(TAG, "Could not parse server Date header: $serverDateHeader")
+                            Log.w(TAG, "Could not parse server Server-Time header: $serverTimeHeader")
+                        }
+                    } else {
+                        val serverDateHeader = response.headers()["Date"]
+                        if (serverDateHeader != null) {
+                            try {
+                                val sdf = java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", java.util.Locale.US)
+                                val parsed = sdf.parse(serverDateHeader)?.time
+                                if (parsed != null) SecuredClock.update(parsed)
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Could not parse server Date header: $serverDateHeader")
+                            }
                         }
                     }
 

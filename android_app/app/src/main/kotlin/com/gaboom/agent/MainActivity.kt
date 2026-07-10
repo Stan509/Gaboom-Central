@@ -50,10 +50,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         
         // Request location permissions if not granted
-        val permissions = arrayOf(
+        val permissions = mutableListOf(
             android.Manifest.permission.ACCESS_FINE_LOCATION,
             android.Manifest.permission.ACCESS_COARSE_LOCATION
         )
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            permissions.add(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        }
         val missing = permissions.filter {
             checkSelfPermission(it) != android.content.pm.PackageManager.PERMISSION_GRANTED
         }

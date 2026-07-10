@@ -120,16 +120,29 @@ class DynamicRetrofitProvider @Inject constructor(
         val clockInterceptor = Interceptor { chain ->
             val request = chain.request()
             val response = chain.proceed(request)
-            val dateHeader = response.header("Date")
-            if (dateHeader != null) {
+            
+            // Prefer our custom Server-Time header if available (timestamp in ms)
+            val serverTimeHeader = response.header("Server-Time")
+            if (serverTimeHeader != null) {
                 try {
-                    val format = java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", java.util.Locale.US)
-                    val serverTime = format.parse(dateHeader)?.time
-                    if (serverTime != null) {
-                        com.gaboom.agent.data.clock.SecuredClock.update(serverTime)
-                    }
+                    val serverTime = serverTimeHeader.toLong()
+                    com.gaboom.agent.data.clock.SecuredClock.update(serverTime)
                 } catch (e: Exception) {
-                    // Ignore date parsing errors
+                    // Ignore
+                }
+            } else {
+                // Fallback to Date header
+                val dateHeader = response.header("Date")
+                if (dateHeader != null) {
+                    try {
+                        val format = java.text.SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", java.util.Locale.US)
+                        val serverTime = format.parse(dateHeader)?.time
+                        if (serverTime != null) {
+                            com.gaboom.agent.data.clock.SecuredClock.update(serverTime)
+                        }
+                    } catch (e: Exception) {
+                        // Ignore date parsing errors
+                    }
                 }
             }
             response

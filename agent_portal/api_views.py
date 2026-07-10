@@ -87,15 +87,24 @@ def _get_agent_from_request(request: HttpRequest) -> Agent | None:
         return None
 
 
-def _json_error(message: str, status: int = 400) -> JsonResponse:
-    return JsonResponse({"success": False, "error": message}, status=status)
+def _json_error(message: str | dict, status: int = 400) -> JsonResponse:
+    if isinstance(message, str):
+        data = {"success": False, "error": message}
+    else:
+        data = {"success": False}
+        data.update(message)
+    response = JsonResponse(data, status=status)
+    response["Server-Time"] = str(int(time.time() * 1000))
+    return response
 
 
 def _json_success(data: dict | None = None) -> JsonResponse:
-    response = {"success": True}
+    response_data = {"success": True}
     if data:
-        response.update(data)
-    return JsonResponse(response)
+        response_data.update(data)
+    response = JsonResponse(response_data)
+    response["Server-Time"] = str(int(time.time() * 1000))
+    return response
 
 
 def _get_borlette_logo_url(request: HttpRequest, borlette: Borlette) -> str:
@@ -725,7 +734,9 @@ def api_ticket_create_multi(request: HttpRequest) -> JsonResponse:
     is_offline_sync = bool(device_id)
 
     if is_offline_sync:
-        payload_json = json.dumps(body, sort_keys=True, separators=(',', ':'))
+        # BUGFIX: Use the EXACT raw string sent by the Android client (which was already canonicalized
+        # by the client) instead of deserializing and re-serializing it, which causes mismatches.
+        payload_json = request.body.decode("utf-8")
         is_valid, error_msg = _verify_hmac_signature(request, agent, payload_json, session_key)
         if not is_valid:
             logger.warning(f"[TICKET_MULTI] HMAC invalid: {error_msg}")

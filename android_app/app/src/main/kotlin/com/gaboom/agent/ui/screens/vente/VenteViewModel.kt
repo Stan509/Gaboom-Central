@@ -901,7 +901,8 @@ class VenteViewModel @Inject constructor(
                 val request = MultiTicketCreateRequest(
                     tirageIds = selectedIds,
                     entries = entries,
-                    sessionKey = sessionKey
+                    sessionKey = sessionKey,
+                    createdAt = System.currentTimeMillis()
                 )
 
                 // Phase 3: All ticket creations are local-first
@@ -1274,7 +1275,8 @@ class VenteViewModel @Inject constructor(
                 val request = MultiTicketCreateRequest(
                     tirageIds = selectedIds,
                     entries = entries,
-                    sessionKey = sessionKey
+                    sessionKey = sessionKey,
+                    createdAt = System.currentTimeMillis()
                 )
 
                 // Phase 3: All ticket creations are local-first (see TicketRepository)

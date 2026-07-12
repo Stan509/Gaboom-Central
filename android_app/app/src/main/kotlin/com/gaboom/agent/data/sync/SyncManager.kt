@@ -350,7 +350,8 @@ class SyncManager @Inject constructor(
             tirageIds = allTirageIds,
             entries = emptyList(),
             overrides = overrides,
-            sessionKey = firstTicket.sessionKey
+            sessionKey = firstTicket.sessionKey,
+            createdAt = firstTicket.createdAt
         )
     }
     
@@ -367,18 +368,31 @@ class SyncManager @Inject constructor(
         createdTickets.forEach { createdTicket ->
             val localTicket = tirageToLocalTicket[createdTicket.tirageId]
             if (localTicket != null) {
-                pendingTicketDao.markSynced(
-                    id = localTicket.id,
-                    serverTicketId = createdTicket.ticketId,
-                    serverTicketNo = createdTicket.ticketNo
-                )
-                // Phase 3: Mark as uploaded in the local cache
-                localTicketCacheDao.markUploaded(localTicket.id)
-                
-                _syncEvents.emit(SyncEvent.TicketSynced(
-                    localId = localTicket.id,
-                    serverTicketNo = createdTicket.ticketNo
-                ))
+                if (createdTicket.status == "ANNULE") {
+                    pendingTicketDao.updateSyncFailed(
+                        id = localTicket.id,
+                        status = SyncStatus.FAILED,
+                        error = "Ticket annulé par le serveur (décalage horaire > 45s)"
+                    )
+                    _syncEvents.emit(SyncEvent.TicketFailed(
+                        localId = localTicket.id,
+                        error = "Ticket annulé par le serveur (décalage horaire > 45s)",
+                        isRetryable = false
+                    ))
+                } else {
+                    pendingTicketDao.markSynced(
+                        id = localTicket.id,
+                        serverTicketId = createdTicket.ticketId,
+                        serverTicketNo = createdTicket.ticketNo
+                    )
+                    // Phase 3: Mark as uploaded in the local cache
+                    localTicketCacheDao.markUploaded(localTicket.id)
+                    
+                    _syncEvents.emit(SyncEvent.TicketSynced(
+                        localId = localTicket.id,
+                        serverTicketNo = createdTicket.ticketNo
+                    ))
+                }
                 successCount++
                 Log.d(TAG, "Ticket ${localTicket.id} synced -> ${createdTicket.ticketNo}")
             }

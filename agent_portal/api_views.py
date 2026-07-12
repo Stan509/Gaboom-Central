@@ -1533,9 +1533,10 @@ def api_ticket_list_agent(request: HttpRequest) -> JsonResponse:
         if status_filter and computed_status != status_filter:
             continue
         
-        # Check if can be voided (< 60 seconds)
+        # Check if can be voided (< 5 minutes and draw is open)
         age_seconds = (now - ticket.created_at).total_seconds()
-        can_void = age_seconds < 60 and ticket.statut != TicketStatus.ANNULE and not ticket.is_paid
+        is_draw_open = (ticket.tirage and ticket.tirage.etat_ouverture == "OUVERT") if ticket.tirage else True
+        can_void = age_seconds < 300 and ticket.statut != TicketStatus.ANNULE and not ticket.is_paid and is_draw_open
         age_minutes = age_seconds / 60.0
         
         # Count bets
@@ -1696,9 +1697,10 @@ def api_ticket_group_search(request: HttpRequest, group_id: str) -> JsonResponse
         else:
             computed_status = "pending"
         
-        # Vérifier si annulation possible (< 60 secondes)
+        # Vérifier si annulation possible (< 5 minutes et tirage ouvert)
         age_seconds = (now - ticket.created_at).total_seconds()
-        can_void = age_seconds < 60 and ticket.statut != TicketStatus.ANNULE and not ticket.is_paid
+        is_draw_open = (ticket.tirage and ticket.tirage.etat_ouverture == "OUVERT") if ticket.tirage else True
+        can_void = age_seconds < 300 and ticket.statut != TicketStatus.ANNULE and not ticket.is_paid and is_draw_open
         
         lines = []
         for line in ticket.lignes.all():
@@ -1837,15 +1839,19 @@ def api_ticket_void_agent(request: HttpRequest, ticket_id: str) -> JsonResponse:
     except Ticket.DoesNotExist:
         return _json_error("Ticket non trouvé", 404)
 
-    # Vérification délai 60 secondes
+    # Vérification délai 5 minutes
     now = timezone.now()
     age = now - ticket.created_at
 
-    if age > timedelta(seconds=60):
+    if age > timedelta(minutes=5):
         return _json_error(
-            f"Annulation impossible: ticket créé il y a {int(age.total_seconds())} secondes (max 60 sec)",
+            f"Annulation impossible: ticket créé il y a {int(age.total_seconds())} secondes (max 5 min)",
             400
         )
+
+    # Aucun ticket ne peut être annulé si le tirage est fermé
+    if ticket.tirage and ticket.tirage.etat_ouverture != "OUVERT":
+        return _json_error("Annulation impossible: le tirage est fermé", 400)
 
     # Utiliser le service qui gère l'écriture inverse caisse
     result = void_ticket_with_cashbox_reversal(ticket)

@@ -63,25 +63,6 @@ object SecuredClock {
     }
     
     fun now(): Long {
-        if (lastServerTime == 0L) {
-            return System.currentTimeMillis()
-        }
-        
-        val currentElapsed = SystemClock.elapsedRealtime()
-        val currentSystem = System.currentTimeMillis()
-        
-        // If reboot occurred or elapsed baseline is reset
-        if (currentElapsed < lastSyncElapsedRealtime || lastSyncElapsedRealtime == 0L) {
-            val drift = lastSyncSystemTime - lastServerTime
-            val estimated = currentSystem - drift
-            return if (currentSystem < lastSyncSystemTime) {
-                // Fraud safety floor: time cannot move backwards
-                lastServerTime
-            } else {
-                estimated
-            }
-        }
-        
-        return lastServerTime + (currentElapsed - lastSyncElapsedRealtime)
+        return System.currentTimeMillis()
     }
 }

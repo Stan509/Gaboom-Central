@@ -181,7 +181,8 @@ data class MultiTicketCreateRequest(
     @SerializedName("tirage_ids") val tirageIds: List<Int>,
     val entries: List<MultiTicketEntry>,
     val overrides: Map<String, MultiTicketOverride>? = null,
-    @SerializedName("session_key") val sessionKey: String? = null  // Required for offline sync HMAC
+    @SerializedName("session_key") val sessionKey: String? = null,
+    @SerializedName("created_at") val createdAt: Long? = null
 )
 
 data class MultiTicketOverride(
@@ -212,7 +213,8 @@ data class MultiTicketInfo(
     @SerializedName("total_mise") val totalMise: Double,
     val lines: List<MultiTicketLineInfo>?,
     val signature: String? = null,
-    val hash: String? = null
+    val hash: String? = null,
+    val status: String? = null
 )
 
 data class CreatedTicketInfo(

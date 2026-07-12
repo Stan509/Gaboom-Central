@@ -312,6 +312,18 @@ class TicketBatchService:
                     ticket_id_to_use = uuid.UUID(ticket_uuid) if ticket_uuid else uuid.uuid4()
                     ticket_number_to_use = ticket_number if ticket_number else _generate_ticket_number()
 
+                    ticket_statut = TicketStatus.VALIDE
+                    client_created_at = body.get("created_at")
+                    if client_created_at:
+                        try:
+                            server_now_ms = int(timezone.now().timestamp() * 1000)
+                            drift_ms = abs(server_now_ms - int(client_created_at))
+                            if drift_ms > 45000:
+                                logger.warning(f"[BATCH] Clock drift {drift_ms}ms exceeded 45s for ticket {ticket_uuid}. Creating as ANNULE.")
+                                ticket_statut = TicketStatus.ANNULE
+                        except Exception as e:
+                            logger.error(f"[BATCH] Error validating clock drift: {e}")
+
                     ticket = Ticket.objects.create(
                         id=ticket_id_to_use,
                         borlette=borlette,
@@ -321,7 +333,7 @@ class TicketBatchService:
                         group_id=group_id,
                         numero_ticket=ticket_number_to_use,
                         total_mise=Decimal("0"),
-                        statut=TicketStatus.VALIDE,
+                        statut=ticket_statut,
                     )
 
                     total_mise = Decimal("0")
@@ -374,10 +386,11 @@ class TicketBatchService:
                     ticket.total_mise = total_mise
                     ticket.save(update_fields=["total_mise"])
 
-                    _create_commission_entry(ticket)
+                    if ticket.statut == TicketStatus.VALIDE:
+                        _create_commission_entry(ticket)
 
-                    from agent_portal.services import create_cashbox_entry_for_sale
-                    create_cashbox_entry_for_sale(ticket)
+                        from agent_portal.services import create_cashbox_entry_for_sale
+                        create_cashbox_entry_for_sale(ticket)
 
                     log_audit(
                         action=AuditAction.TICKET_CREATE,
@@ -408,6 +421,7 @@ class TicketBatchService:
                         "group_id": str(group_id),
                         "total_mise": float(total_mise),
                         "lines": ticket_lines,
+                        "status": ticket.statut,
                     })
 
             except Exception as e:

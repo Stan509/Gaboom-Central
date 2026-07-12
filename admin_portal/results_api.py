@@ -433,12 +433,14 @@ def api_ticket_search(request: HttpRequest) -> JsonResponse:
     if not ticket:
         return JsonResponse({"error": "Ticket non trouvé"}, status=404)
     
-    # Calculer si suppression possible (<7 min et pas payé)
+    # Calculer si suppression possible (< 5 min, pas payé, et tirage ouvert)
     now = timezone.now()
+    is_draw_open = (ticket.tirage and ticket.tirage.etat_ouverture == "OUVERT") if ticket.tirage else True
     can_delete = (
-        (now - ticket.created_at) <= timedelta(minutes=7)
+        (now - ticket.created_at) <= timedelta(minutes=5)
         and ticket.total_gain_paye == 0
         and ticket.statut != TicketStatus.ANNULE
+        and is_draw_open
     )
     
     # Lignes du ticket
@@ -509,14 +511,18 @@ def api_ticket_void(request: HttpRequest, ticket_id: str) -> JsonResponse:
     except Ticket.DoesNotExist:
         return JsonResponse({"error": "Ticket non trouvé"}, status=404)
     
-    # Vérification délai 7 minutes
+    # Vérification délai 5 minutes
     now = timezone.now()
     age = now - ticket.created_at
     
-    if age > timedelta(minutes=7):
+    if age > timedelta(minutes=5):
         return JsonResponse({
-            "error": f"Annulation impossible: ticket créé il y a {int(age.total_seconds() // 60)} minutes (max 7 min)"
+            "error": f"Annulation impossible: ticket créé il y a {int(age.total_seconds() // 60)} minutes (max 5 min)"
         }, status=400)
+
+    # Aucun ticket ne peut être annulé si le tirage est fermé
+    if ticket.tirage and ticket.tirage.etat_ouverture != "OUVERT":
+        return JsonResponse({"error": "Annulation impossible: le tirage est fermé"}, status=400)
     
     # Utiliser le service qui gère l'écriture inverse caisse
     result = void_ticket_with_cashbox_reversal(ticket)

@@ -87,34 +87,15 @@ class OfflineLimitEnforcer @Inject constructor(
         val lastContact = agentConfigDataStore.getLastServerContactAt()
         val inMaintenance = agentConfigDataStore.isServerInMaintenance()
 
-        // ── Clock drift check ─────────────────────────────────────────────────
-        val secureClock = SecuredClock.now()
-        val drift = Math.abs(now - secureClock)
-        if (drift > MAX_CLOCK_DRIFT_MS && secureClock > 0L) {
-            val driftSec = drift / 1000L
-            Log.w(TAG, "Clock drift exceeded: ${driftSec}s")
-            _gateState.value = SaleGateState(
-                reason = SaleBlockedReason.CLOCK_DRIFT_EXCEEDED,
-                clockDriftSeconds = driftSec
-            )
-            return
-        }
+        // ── Clock drift check (Removed) ──────────────────────────────────────
 
-        // ── No contact yet: grace period ──────────────────────────────────────
+        // ── No contact yet: allow offline sales ───────────────────────────────
         if (lastContact == 0L) {
-            // Allow sales for GRACE_PERIOD_MS after app start to let heartbeat establish
-            val appStartTime = agentConfigDataStore.getAppStartTime()
-            val elapsedSinceStart = now - appStartTime
-            if (appStartTime > 0L && elapsedSinceStart < GRACE_PERIOD_MS) {
-                Log.d(TAG, "Grace period active (${elapsedSinceStart / 1000}s since start). Allowing sales.")
-                _gateState.value = SaleGateState(
-                    reason = SaleBlockedReason.NONE,
-                    minutesBeforeBlock = 25
-                )
-                return
-            }
-            Log.w(TAG, "No server contact ever recorded")
-            _gateState.value = SaleGateState(reason = SaleBlockedReason.NO_SERVER_CONTACT)
+            Log.d(TAG, "No server contact recorded yet. Allowing offline sales.")
+            _gateState.value = SaleGateState(
+                reason = SaleBlockedReason.NONE,
+                minutesBeforeBlock = 25
+            )
             return
         }
 

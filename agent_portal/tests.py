@@ -579,3 +579,96 @@ class BlueprintEndpointTests(TestCase):
         )
         
         self.assertEqual(response.status_code, 401)
+
+
+class CancellationAndDriftTests(TestCase):
+    """Tests for the new 5-minute cancellation window and 45s clock drift validation"""
+
+    def setUp(self):
+        self.client = Client()
+        self.admin_user = User.objects.create_user(username="adm", password="adm", role="ADMIN")
+        self.borlette = Borlette.objects.create(user=self.admin_user, nom_borlette="Borlette")
+        self.user = User.objects.create_user(username="agent1", password="pwd")
+        self.agent = Agent.objects.create(user=self.user, borlette=self.borlette, nom="Agent")
+        self.session_key = str(uuid.uuid4())
+        self.tirage = Tirage.objects.create(borlette=self.borlette, nom="Midi", code="MIDI", session_key=self.session_key)
+
+    def _get_auth_headers(self, agent):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        refresh = RefreshToken.for_user(agent.user)
+        session_id = uuid.uuid4().hex
+        agent.user.active_session_id = session_id
+        agent.user.save()
+        refresh["session_id"] = session_id
+        return {"HTTP_AUTHORIZATION": f"Bearer {refresh.access_token}"}
+
+    @patch('agent_portal.api_views._get_agent_from_request')
+    def test_void_ticket_within_5_minutes_success(self, mock_get_agent):
+        mock_get_agent.return_value = self.agent
+        ticket = Ticket.objects.create(
+            borlette=self.borlette, agent=self.agent, tirage=self.tirage,
+            numero_ticket="TK-OK", statut=TicketStatus.VALIDE
+        )
+        # ticket.created_at defaults to timezone.now()
+        response = self.client.post(
+            f"/api/agent/ticket/{ticket.id}/void/",
+            **self._get_auth_headers(self.agent)
+        )
+        self.assertEqual(response.status_code, 200)
+
+    @patch('agent_portal.api_views._get_agent_from_request')
+    def test_void_ticket_after_5_minutes_fails(self, mock_get_agent):
+        mock_get_agent.return_value = self.agent
+        ticket = Ticket.objects.create(
+            borlette=self.borlette, agent=self.agent, tirage=self.tirage,
+            numero_ticket="TK-FAIL", statut=TicketStatus.VALIDE
+        )
+        # Set created_at to 6 minutes ago
+        ticket.created_at = timezone.now() - timezone.timedelta(minutes=6)
+        ticket.save()
+        response = self.client.post(
+            f"/api/agent/ticket/{ticket.id}/void/",
+            **self._get_auth_headers(self.agent)
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Annulation impossible", response.json()["error"])
+
+    @patch('agent_portal.api_views._get_agent_from_request')
+    def test_void_ticket_when_draw_closed_fails(self, mock_get_agent):
+        mock_get_agent.return_value = self.agent
+        closed_draw = Tirage.objects.create(
+            borlette=self.borlette, nom="Closed Draw", code="CLOSED",
+            session_key=self.session_key, statut="SUSPENDU"
+        )
+        ticket = Ticket.objects.create(
+            borlette=self.borlette, agent=self.agent, tirage=closed_draw,
+            numero_ticket="TK-CLOSED", statut=TicketStatus.VALIDE
+        )
+        response = self.client.post(
+            f"/api/agent/ticket/{ticket.id}/void/",
+            **self._get_auth_headers(self.agent)
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("tirage est fermé", response.json()["error"])
+
+    @patch('agent_portal.api_views._get_agent_from_request')
+    def test_create_ticket_clock_drift_exceeded_creates_annule(self, mock_get_agent):
+        mock_get_agent.return_value = self.agent
+        payload = {
+            "tirage_ids": [self.tirage.id],
+            "entries": [
+                {"game": "boule", "number": "34", "stake": 50.0}
+            ],
+            "session_key": self.session_key,
+            "created_at": int((timezone.now() - timezone.timedelta(seconds=60)).timestamp() * 1000)  # 60s drift > 45s
+        }
+        response = self.client.post(
+            "/api/agent/ticket/create-multi/",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._get_auth_headers(self.agent)
+        )
+        self.assertEqual(response.status_code, 200)
+        tickets = response.json()["tickets"]
+        self.assertEqual(len(tickets), 1)
+        self.assertEqual(tickets[0]["status"], "ANNULE")

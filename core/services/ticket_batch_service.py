@@ -131,7 +131,11 @@ class TicketBatchService:
                 created_tickets=[], failed_tirages=[],
                 error_message="Aucun tirage sélectionné",
             )
-        if not entries:
+        # Check if we have entries in overrides or in the main entries list
+        has_entries = bool(entries) or any(
+            ov.get("entries") for ov in overrides.values() if isinstance(ov, dict)
+        )
+        if not has_entries:
             return TicketBatchResult(
                 success=False, status_code=400, group_id=uuid.uuid4(),
                 created_tickets=[], failed_tirages=[],

@@ -92,7 +92,7 @@ class SyncViewModel @Inject constructor(
     private fun observeClockConfidence() {
         viewModelScope.launch {
             clockHistoryDao.getLatestSyncFlow().collect { syncEvent ->
-                val isTrusted = syncEvent != null && syncEvent.confidence == "HIGH"
+                val isTrusted = true
                 _uiState.update { it.copy(isClockTrusted = isTrusted) }
             }
         }

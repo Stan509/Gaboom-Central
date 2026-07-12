@@ -902,7 +902,8 @@ class VenteViewModel @Inject constructor(
                     tirageIds = selectedIds,
                     entries = entries,
                     sessionKey = sessionKey,
-                    createdAt = System.currentTimeMillis()
+                    createdAt = System.currentTimeMillis(),
+                    clientTime = System.currentTimeMillis()
                 )
 
                 // Phase 3: All ticket creations are local-first
@@ -1276,7 +1277,8 @@ class VenteViewModel @Inject constructor(
                     tirageIds = selectedIds,
                     entries = entries,
                     sessionKey = sessionKey,
-                    createdAt = System.currentTimeMillis()
+                    createdAt = System.currentTimeMillis(),
+                    clientTime = System.currentTimeMillis()
                 )
 
                 // Phase 3: All ticket creations are local-first (see TicketRepository)

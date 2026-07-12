@@ -351,7 +351,8 @@ class SyncManager @Inject constructor(
             entries = emptyList(),
             overrides = overrides,
             sessionKey = firstTicket.sessionKey,
-            createdAt = firstTicket.createdAt
+            createdAt = firstTicket.createdAt,
+            clientTime = System.currentTimeMillis()
         )
     }
     

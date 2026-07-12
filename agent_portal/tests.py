@@ -660,7 +660,8 @@ class CancellationAndDriftTests(TestCase):
                 {"game": "boule", "number": "34", "stake": 50.0}
             ],
             "session_key": self.session_key,
-            "created_at": int((timezone.now() - timezone.timedelta(seconds=60)).timestamp() * 1000)  # 60s drift > 45s
+            "created_at": int(timezone.now().timestamp() * 1000),
+            "client_time": int((timezone.now() - timezone.timedelta(seconds=60)).timestamp() * 1000)  # 60s drift > 45s
         }
         response = self.client.post(
             "/api/agent/ticket/create-multi/",

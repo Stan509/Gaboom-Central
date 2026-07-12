@@ -317,11 +317,11 @@ class TicketBatchService:
                     ticket_number_to_use = ticket_number if ticket_number else _generate_ticket_number()
 
                     ticket_statut = TicketStatus.VALIDE
-                    client_created_at = body.get("created_at")
-                    if client_created_at:
+                    client_time = body.get("client_time") or body.get("created_at")
+                    if client_time:
                         try:
                             server_now_ms = int(timezone.now().timestamp() * 1000)
-                            drift_ms = abs(server_now_ms - int(client_created_at))
+                            drift_ms = abs(server_now_ms - int(client_time))
                             if drift_ms > 45000:
                                 logger.warning(f"[BATCH] Clock drift {drift_ms}ms exceeded 45s for ticket {ticket_uuid}. Creating as ANNULE.")
                                 ticket_statut = TicketStatus.ANNULE

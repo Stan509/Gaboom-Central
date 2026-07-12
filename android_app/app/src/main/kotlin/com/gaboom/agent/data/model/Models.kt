@@ -182,7 +182,8 @@ data class MultiTicketCreateRequest(
     val entries: List<MultiTicketEntry>,
     val overrides: Map<String, MultiTicketOverride>? = null,
     @SerializedName("session_key") val sessionKey: String? = null,
-    @SerializedName("created_at") val createdAt: Long? = null
+    @SerializedName("created_at") val createdAt: Long? = null,
+    @SerializedName("client_time") val clientTime: Long? = null
 )
 
 data class MultiTicketOverride(

@@ -131,7 +131,8 @@ class TicketRepository @Inject constructor(
                 tirageIds = listOf(tirageId),
                 entries = entries,
                 sessionKey = sessionKey,
-                createdAt = now
+                createdAt = now,
+                clientTime = now
             )
             val payloadJson = gson.toJson(multiRequest)
             val linesSummary = entries.take(5).joinToString(", ") { "${it.game}:${it.number}" } +

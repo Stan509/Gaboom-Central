@@ -80,6 +80,7 @@ MIDDLEWARE = [
     'accounts.middleware.ForcePasswordChangeMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'accounts.middleware.ServerTimeMiddleware',
 ]
 
 

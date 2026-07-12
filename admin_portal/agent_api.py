@@ -97,15 +97,39 @@ def api_agent_stats(request: HttpRequest, agent_id: int) -> JsonResponse:
 
     stats = calculate_agent_balance(agent)
     
+    latitude = agent.latitude
+    longitude = agent.longitude
+    last_location_updated_at = agent.last_location_updated_at
+    
+    if latitude is None or longitude is None:
+        from accounts.models import AgentLocationHistory
+        latest_loc = AgentLocationHistory.objects.filter(agent=agent).order_by("-timestamp").first()
+        if latest_loc:
+            latitude = latest_loc.latitude
+            longitude = latest_loc.longitude
+            last_location_updated_at = latest_loc.timestamp
+
+    try:
+        lat_val = float(latitude) if latitude is not None and str(latitude).strip() != "" else None
+    except Exception:
+        lat_val = None
+
+    try:
+        lng_val = float(longitude) if longitude is not None and str(longitude).strip() != "" else None
+    except Exception:
+        lng_val = None
+
+    last_loc_updated_str = last_location_updated_at.isoformat() if last_location_updated_at else None
+
     return JsonResponse({
         "agent": {
             "id": agent.id,
             "nom": agent.nom,
             "telephone": agent.telephone,
             "commission_rate": float(stats["commission_rate"]),
-            "latitude": float(agent.latitude) if agent.latitude is not None else None,
-            "longitude": float(agent.longitude) if agent.longitude is not None else None,
-            "last_location_updated_at": agent.last_location_updated_at.isoformat() if agent.last_location_updated_at else None,
+            "latitude": lat_val,
+            "longitude": lng_val,
+            "last_location_updated_at": last_loc_updated_str,
         },
         "stats": {
             "total_mises": float(stats["total_mises"]),

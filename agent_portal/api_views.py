@@ -224,6 +224,49 @@ def _verify_hmac_signature(request: HttpRequest, agent, payload_json: str, sessi
     return True, ""
 
 
+def canonicalize_json(payload_json: str) -> str:
+    """
+    Canonicalise un payload JSON en triant les clés par ordre alphabétique récursivement.
+    Correspond exactement à HmacUtil.canonicalizeJson côté Kotlin.
+    """
+    import json
+    from decimal import Decimal
+    try:
+        val = json.loads(payload_json)
+    except Exception:
+        return payload_json
+
+    def canonicalize(item):
+        if isinstance(item, dict):
+            sorted_keys = sorted(item.keys())
+            parts = []
+            for key in sorted_keys:
+                escaped_key = json.dumps(key)
+                parts.append(f"{escaped_key}:{canonicalize(item[key])}")
+            return "{" + ",".join(parts) + "}"
+        elif isinstance(item, list):
+            parts = [canonicalize(i) for i in item]
+            return "[" + ",".join(parts) + "]"
+        elif isinstance(item, str):
+            return json.dumps(item)
+        elif isinstance(item, bool):
+            return "true" if item else "false"
+        elif item is None:
+            return "null"
+        elif isinstance(item, (int, float, Decimal)):
+            if isinstance(item, bool):
+                return "true" if item else "false"
+            elif isinstance(item, int):
+                return str(item)
+            elif isinstance(item, float):
+                return str(item)
+            elif isinstance(item, Decimal):
+                return str(item)
+        return str(item)
+
+    return canonicalize(val)
+
+
 def _generate_ticket_number() -> str:
     now = timezone.localtime(timezone.now())
     return f"CB-{now.year}-{now.strftime('%m%d%H%M%S%f')[-10:]}"
@@ -734,10 +777,11 @@ def api_ticket_create_multi(request: HttpRequest) -> JsonResponse:
     is_offline_sync = bool(device_id)
 
     if is_offline_sync:
-        # BUGFIX: Use the EXACT raw string sent by the Android client (which was already canonicalized
-        # by the client) instead of deserializing and re-serializing it, which causes mismatches.
+        # BUGFIX: Use the canonicalized form of the exact raw payload string sent by the client,
+        # since the client computes the signature on the canonicalized JSON in-memory.
         payload_json = request.body.decode("utf-8")
-        is_valid, error_msg = _verify_hmac_signature(request, agent, payload_json, session_key)
+        canonical_payload = canonicalize_json(payload_json)
+        is_valid, error_msg = _verify_hmac_signature(request, agent, canonical_payload, session_key)
         if not is_valid:
             logger.warning(f"[TICKET_MULTI] HMAC invalid: {error_msg}")
             from accounts.audit import log_audit

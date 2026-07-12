@@ -1015,27 +1015,55 @@ class VenteViewModel @Inject constructor(
 
     private suspend fun printTicket(ticketId: String): com.gaboom.agent.data.model.PrintData? {
         return try {
-            val printResponse = ticketRepository.getTicketPrint(ticketId)
-            if (printResponse.isSuccessful) {
-                val printData = printResponse.body()?.printData
-                if (printData != null) {
-                    val result = printer.printTicket(printData)
-                    if (result.isFailure) {
-                        val errMsg = result.exceptionOrNull()?.message ?: "Erreur inconnue"
-                        android.util.Log.e("VenteViewModel", "Impression echouee: $errMsg")
-                        _uiState.value = _uiState.value.copy(
-                            printError = "Impression echouee: $errMsg"
-                        )
-                    } else {
-                        _uiState.value = _uiState.value.copy(printError = null)
-                    }
-                    printData
+            val pendingTicket = pendingTicketDao.getById(ticketId)
+            val printData = if (pendingTicket != null) {
+                val req = gson.fromJson(pendingTicket.payloadJson, MultiTicketCreateRequest::class.java)
+                val lines = req.entries.map { entry ->
+                    TicketLine(
+                        jeu = entry.game,
+                        valeur = entry.number,
+                        mise = entry.stake,
+                        option = entry.option ?: 1,
+                        gratuit = entry.gratuit
+                    )
+                }
+                val ticketNo = pendingTicket.serverTicketNo ?: pendingTicket.localTicketNo ?: "HL-${pendingTicket.id.take(8).uppercase()}"
+                val ticketIdToUse = pendingTicket.serverTicketId ?: pendingTicket.id
+                val createdInfo = CreatedTicketInfo(
+                    ticketId = ticketIdToUse,
+                    ticketNo = ticketNo,
+                    tirageId = pendingTicket.tirageId ?: 0,
+                    tirageNom = _uiState.value.availableTirages.find { it.id == pendingTicket.tirageId }?.nom ?: "Tirage",
+                    totalMise = pendingTicket.totalMise,
+                    printed = false,
+                    isOffline = true,
+                    signature = pendingTicket.hmacSignature,
+                    hash = pendingTicket.hmacSignature
+                )
+                buildOfflinePrintData(createdInfo, lines)
+            } else {
+                val printResponse = ticketRepository.getTicketPrint(ticketId)
+                if (printResponse.isSuccessful) {
+                    printResponse.body()?.printData
                 } else {
-                    _uiState.value = _uiState.value.copy(printError = "Donnees d'impression vides")
                     null
                 }
+            }
+
+            if (printData != null) {
+                val result = printer.printTicket(printData)
+                if (result.isFailure) {
+                    val errMsg = result.exceptionOrNull()?.message ?: "Erreur inconnue"
+                    android.util.Log.e("VenteViewModel", "Impression echouee: $errMsg")
+                    _uiState.value = _uiState.value.copy(
+                        printError = "Impression echouee: $errMsg"
+                    )
+                } else {
+                    _uiState.value = _uiState.value.copy(printError = null)
+                }
+                printData
             } else {
-                _uiState.value = _uiState.value.copy(printError = "Erreur de recuperation du ticket code: ${printResponse.code()}")
+                _uiState.value = _uiState.value.copy(printError = "Donnees d'impression vides")
                 null
             }
         } catch (e: Exception) {
@@ -1302,7 +1330,9 @@ class VenteViewModel @Inject constructor(
                 tirageNom = t.tirageNom,
                 totalMise = t.totalMise,
                 printed = false,
-                isOffline = false
+                isOffline = true,
+                signature = t.signature,
+                hash = t.hash
             )
         }
 

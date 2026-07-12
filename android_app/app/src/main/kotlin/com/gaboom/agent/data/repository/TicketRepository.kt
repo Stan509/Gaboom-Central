@@ -74,7 +74,9 @@ class TicketRepository @Inject constructor(
                                     mise = line.mise, potentielGain = 0.0,
                                     gratuit = line.gratuit, option = line.option
                                 )
-                            }
+                            },
+                            signature = firstTicket.signature,
+                            hash = firstTicket.hash
                         ),
                         error = null
                     )
@@ -202,7 +204,9 @@ class TicketRepository @Inject constructor(
                 ticketNo = localTicketNo,
                 groupId = groupId,
                 totalMise = entries.sumOf { it.stake },
-                lines = null
+                lines = null,
+                signature = hmacSignature,
+                hash = hmacSignature
             )
         }
 

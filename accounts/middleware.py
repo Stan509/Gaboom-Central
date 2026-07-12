@@ -2,6 +2,7 @@
 Middleware pour forcer le changement de mot de passe après connexion avec un mot de passe temporaire.
 """
 from django.shortcuts import redirect
+import time
 
 
 class ForcePasswordChangeMiddleware:
@@ -23,4 +24,16 @@ class ForcePasswordChangeMiddleware:
                 return redirect("force_password_change")
 
         response = self.get_response(request)
+        return response
+
+
+class ServerTimeMiddleware:
+    """Incorpore l'en-tête Server-Time dans toutes les réponses HTTP."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        response["Server-Time"] = str(int(time.time() * 1000))
         return response

@@ -210,7 +210,9 @@ data class MultiTicketInfo(
     @SerializedName("ticket_no") val ticketNo: String,
     @SerializedName("group_id") val groupId: String? = null,
     @SerializedName("total_mise") val totalMise: Double,
-    val lines: List<MultiTicketLineInfo>?
+    val lines: List<MultiTicketLineInfo>?,
+    val signature: String? = null,
+    val hash: String? = null
 )
 
 data class CreatedTicketInfo(
@@ -266,7 +268,9 @@ data class TicketInfo(
     @SerializedName("created_at") val createdAt: String,
     @SerializedName("closed_at") val closedAt: String?,
     val tirages: List<String>,
-    val lines: List<TicketLine>?
+    val lines: List<TicketLine>?,
+    val signature: String? = null,
+    val hash: String? = null
 )
 
 data class TicketPrintResponse(

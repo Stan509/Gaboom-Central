@@ -72,6 +72,13 @@ def _safe_decimal(value: Any) -> Decimal:
         return Decimal("0")
 
 
+def _safe_int(value: Any, default: int = 1) -> int:
+    try:
+        return int(value) if value is not None else default
+    except (ValueError, TypeError):
+        return default
+
+
 class TicketBatchResult:
     """Résultat d'un batch de création de tickets."""
     def __init__(
@@ -238,6 +245,7 @@ class TicketBatchService:
                             "valeur": e.get("number", "") or e.get("valeur", ""),
                             "mise": e.get("stake", 0) or e.get("mise", 0),
                             "gratuit": bool(e.get("gratuit", False)) or bool(e.get("free", False)),
+                            "option": _safe_int(e.get("option", 1)),
                         })
 
                     validation = TicketValidationService.validate_ticket(
@@ -363,12 +371,14 @@ class TicketBatchService:
                             mise=mise,
                             potentiel_gain=potentiel_gain,
                             gratuit=gratuit,
+                            option=raw.get("option", 1),
                         )
                         ticket_lines.append({
                             "jeu": jeu.upper(),
                             "valeur": valeur,
                             "mise": float(mise),
                             "potentiel_gain": float(potentiel_gain),
+                            "option": raw.get("option", 1),
                         })
                         total_mise += mise
 

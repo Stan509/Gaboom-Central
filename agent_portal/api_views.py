@@ -470,6 +470,7 @@ def api_tirages_actifs(request: HttpRequest) -> JsonResponse:
     now = timezone.localtime(timezone.now())
     data = []
     for t in tirages:
+        t.ensure_current_session()
         data.append({
             "id": t.id,
             "nom": t.nom,
@@ -478,6 +479,7 @@ def api_tirages_actifs(request: HttpRequest) -> JsonResponse:
             "heure_fermeture": t.heure_fermeture.strftime("%H:%M") if t.heure_fermeture else "--:--",
             "heure_tirage": t.heure_tirage.strftime("%H:%M") if t.heure_tirage else "--:--",
             "etat": t.etat_ouverture,
+            "session_key": str(t.session_key) if t.session_key else None,
         })
 
     return _json_success({
@@ -505,6 +507,8 @@ def api_tirage_disponibles(request: HttpRequest, tirage_id: int) -> JsonResponse
     if not tirage:
         return _json_error("Tirage non trouvé", 404)
 
+    tirage.ensure_current_session()
+
     numeros = RiskManagementService.list_available_numbers(tirage=tirage)
     combis = {
         "mariage": RiskManagementService.list_available_combis(tirage=tirage, jeu_type="mariage"),
@@ -519,6 +523,7 @@ def api_tirage_disponibles(request: HttpRequest, tirage_id: int) -> JsonResponse
         "etat": tirage.etat_ouverture,
         "numeros": numeros,
         "combis": combis,
+        "session_key": str(tirage.session_key) if tirage.session_key else None,
     })
 
 

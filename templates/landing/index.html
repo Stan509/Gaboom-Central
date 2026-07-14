@@ -4,8 +4,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gaboom - Borlette OS</title>
-    <meta name="description" content="Gérez votre borlette avec une précision absolue. Anti-fraude IA, rapports temps réel et portail agents premium.">
+    <title>Gaboom - Système Directeur de Borlette & Loterie Haïtienne (Tiraj Florida, NY)</title>
+    <meta name="description" content="Le système directeur de borlette numéro 1 en Haïti. Gérez votre réseau d'agences, suivez les tirages Florida et New York en temps réel avec IA anti-fraude, contrôle des fiches et statistiques.">
+    <meta name="keywords" content="borlette, bòlèt, tiraj florida, tiraj midi, tiraj soir, loterie haitienne, systeme directeur borlette, loto, loto 3, loto 4, boule borlette, central borlette, gaboom, tchala, tirage new york, gains borlette">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ request.build_absolute_uri }}">
+    <meta property="og:title" content="Gaboom - Logiciel Directeur de Borlette & Loterie Haïtienne">
+    <meta property="og:description" content="Optimisez et automatisez votre réseau d'agences de borlette. Anti-fraude IA, tirages Florida/NY en direct, gestion caisse et rapports instantanés.">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="Gaboom - Logiciel Directeur de Borlette & Loterie Haïtienne">
+    <meta property="twitter:description" content="Optimisez et automatisez votre réseau d'agences de borlette. Anti-fraude IA, tirages Florida/NY en direct, gestion caisse et rapports instantanés.">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -1255,6 +1267,27 @@
     </div>
 </section>
 
+<!-- DOCUMENTATION CTA -->
+<section class="py-16 px-6 relative overflow-hidden bg-gradient-to-b from-transparent via-orange-500/5 to-transparent border-t border-white/5">
+    <div class="max-w-4xl mx-auto text-center relative z-10">
+        <span class="inline-block px-4 py-2 rounded-full bg-orange-500/20 border border-orange-500/30 text-orange-400 text-xs font-bold uppercase tracking-widest mb-6">
+            Ressources & Guides
+        </span>
+        <h2 class="text-3xl md:text-5xl font-black mb-6 text-white leading-tight">
+            Besoin d'aide pour configurer votre plateforme ?
+        </h2>
+        <p class="text-lg text-zinc-400 mb-8 max-w-xl mx-auto leading-relaxed">
+            Consultez notre documentation complète avec des guides détaillés, des vidéos d'instructions et des tutoriels pas-à-pas pour maîtriser tous les aspects de Central Borlette.
+        </p>
+        <a href="/documentation/" class="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl text-sm font-bold uppercase tracking-widest shadow-lg shadow-orange-500/30 hover:shadow-orange-500/40 hover:scale-105 transition-all text-white">
+            <i data-lucide="book-open" class="h-5 w-5"></i>
+            Voir la documentation
+        </a>
+    </div>
+    <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-orange-500/5 blur-[120px] rounded-full pointer-events-none"></div>
+</section>
+
+
 <!-- FOOTER -->
 <footer class="border-t-2 border-orange-500/30 py-10 px-6 bg-[#0a0a0b] relative z-10">
     <div class="max-w-7xl mx-auto">
@@ -1287,7 +1320,7 @@
                 <h4 class="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-4">Support</h4>
                 <ul class="space-y-2">
                     <li><a href="#" class="text-sm text-zinc-500 hover:text-white transition-colors">Centre d'aide</a></li>
-                    <li><a href="#" class="text-sm text-zinc-500 hover:text-white transition-colors">Documentation</a></li>
+                    <li><a href="/documentation/" class="text-sm text-zinc-500 hover:text-white transition-colors">Documentation</a></li>
                     <li><a href="#" class="text-sm text-zinc-500 hover:text-white transition-colors">Contact</a></li>
                 </ul>
             </div>

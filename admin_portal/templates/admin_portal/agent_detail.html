@@ -241,6 +241,7 @@
 (function() {
   const agentId = {{ agent.id }};
   let currentBalance = 0;
+  let latestCoords = { lat: null, lng: null };
 
   function fmt(n) { return (n || 0).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' G'; }
 
@@ -320,17 +321,11 @@
           btnGoogleMaps.style.opacity = '0.5';
           btnGoogleMaps.style.cursor = 'not-allowed';
           btnGoogleMaps.title = 'Aucune coordonnée GPS';
-          btnGoogleMaps.onclick = function() {
-            alert("Impossible d'ouvrir l'itinéraire : L'appareil Android de l'agent n'a pas encore envoyé ses coordonnées GPS au serveur.");
-          };
         }
         if (btnShareLocation) {
           btnShareLocation.style.opacity = '0.5';
           btnShareLocation.style.cursor = 'not-allowed';
           btnShareLocation.title = 'Aucune coordonnée GPS';
-          btnShareLocation.onclick = function() {
-            alert("Impossible de partager la position : L'appareil Android de l'agent n'a pas encore envoyé ses coordonnées GPS au serveur.");
-          };
         }
         if (toggleTrackingBtn) {
           toggleTrackingBtn.style.opacity = '0.5';
@@ -355,6 +350,9 @@
         toggleTrackingBtn.style.pointerEvents = 'auto';
       }
       
+      latestCoords.lat = lat;
+      latestCoords.lng = lng;
+      
       const newLatLng = new L.LatLng(lat, lng);
       
       // Icône personnalisée
@@ -375,27 +373,6 @@
       } else {
         // En mode suivi, on rafraîchit l'historique complet pour mettre à jour la ligne
         loadTrackingHistory();
-      }
-      
-      // Update action buttons logic
-      if (btnGoogleMaps && btnShareLocation) {
-        const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
-        
-        btnGoogleMaps.onclick = function() {
-          window.open(mapsUrl, '_blank');
-        };
-        
-        btnShareLocation.onclick = function() {
-          if (navigator.share) {
-            navigator.share({
-              title: `Position de {{ agent.nom }}`,
-              text: `Voici la dernière position GPS connue de {{ agent.nom }} :`,
-              url: mapsUrl
-            }).catch(console.error);
-          } else {
-            copyTextToClipboard(mapsUrl, "Lien copié dans le presse-papier !");
-          }
-        };
       }
     } catch (err) {
       console.error("Leaflet map update failed:", err);
@@ -550,6 +527,40 @@
       loadPerformance(btn.dataset.period);
     });
   });
+
+  // Action buttons event listeners
+  const btnGoogleMaps = document.getElementById('btnGoogleMaps');
+  const btnShareLocation = document.getElementById('btnShareLocation');
+
+  if (btnGoogleMaps) {
+    btnGoogleMaps.addEventListener('click', function() {
+      if (!latestCoords.lat || !latestCoords.lng) {
+        alert("Impossible d'ouvrir l'itinéraire : L'appareil Android de l'agent n'a pas encore envoyé ses coordonnées GPS au serveur.");
+        return;
+      }
+      const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latestCoords.lat},${latestCoords.lng}`;
+      window.open(mapsUrl, '_blank');
+    });
+  }
+
+  if (btnShareLocation) {
+    btnShareLocation.addEventListener('click', function() {
+      if (!latestCoords.lat || !latestCoords.lng) {
+        alert("Impossible de partager la position : L'appareil Android de l'agent n'a pas encore envoyé ses coordonnées GPS au serveur.");
+        return;
+      }
+      const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${latestCoords.lat},${latestCoords.lng}`;
+      if (navigator.share) {
+        navigator.share({
+          title: `Position de {{ agent.nom }}`,
+          text: `Voici la dernière position GPS connue de {{ agent.nom }} :`,
+          url: mapsUrl
+        }).catch(console.error);
+      } else {
+        copyTextToClipboard(mapsUrl, "Lien copié dans le presse-papier !");
+      }
+    });
+  }
 })();
 </script>
 {% endblock %}

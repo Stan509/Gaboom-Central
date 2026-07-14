@@ -201,9 +201,14 @@ class TicketBatchService:
                                     tz=datetime.timezone.utc
                                 ).astimezone(tz)
 
-                                results_exist = Resultat.objects.filter(
-                                    tirage=draw, session_key=session_key
-                                ).exists()
+                                if ticket_dt >= draw.session_started_at:
+                                    results_exist = Resultat.objects.filter(
+                                        tirage=draw, session_key=draw.session_key
+                                    ).exists()
+                                else:
+                                    results_exist = Resultat.objects.filter(
+                                        tirage=draw, session_key=session_key
+                                    ).exists()
 
                                 if not results_exist:
                                     if not draw.heure_fermeture:
@@ -261,9 +266,14 @@ class TicketBatchService:
                                     tz=datetime.timezone.utc
                                 ).astimezone(tz)
 
-                                results_exist = Resultat.objects.filter(
-                                    tirage=draw, session_key=session_key
-                                ).exists()
+                                if ticket_dt >= draw.session_started_at:
+                                    results_exist = Resultat.objects.filter(
+                                        tirage=draw, session_key=draw.session_key
+                                    ).exists()
+                                else:
+                                    results_exist = Resultat.objects.filter(
+                                        tirage=draw, session_key=session_key
+                                    ).exists()
 
                                 if not results_exist:
                                     if not draw.heure_fermeture:

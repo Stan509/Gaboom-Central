@@ -327,6 +327,7 @@ class SyncManager @Inject constructor(
         val allTirageIds = batch.tickets.mapNotNull { it.tirageId }.distinct()
         val overrides = mutableMapOf<String, MultiTicketOverride>()
         
+        // Group tickets by tirageId to merge entries properly
         batch.tickets.forEach { ticket ->
             val ticketReq = gson.fromJson(ticket.payloadJson, MultiTicketCreateRequest::class.java)
             val entries = if (batch.batchId.startsWith("combined_")) {
@@ -338,14 +339,29 @@ class SyncManager @Inject constructor(
             val tid = ticket.tirageId
             if (tid != null) {
                 val ticketNo = ticket.localTicketNo ?: "HL-${ticket.id.take(8).uppercase()}"
-                overrides[tid.toString()] = MultiTicketOverride(
-                    entries = entries,
-                    ticketUuid = ticket.id,
-                    ticketNumber = ticketNo
-                )
+                // Use per-ticket sessionKey so the server can validate against each draw individually
+                val ticketSessionKey = ticket.sessionKey
+                // Merge if multiple tickets share the same tirageId (combined batches)
+                val existing = overrides[tid.toString()]
+                if (existing != null) {
+                    overrides[tid.toString()] = existing.copy(
+                        entries = existing.entries + entries,
+                        // Keep first ticketUuid/ticketNumber for duplicate tirageId
+                        sessionKey = existing.sessionKey ?: ticketSessionKey
+                    )
+                } else {
+                    overrides[tid.toString()] = MultiTicketOverride(
+                        entries = entries,
+                        ticketUuid = ticket.id,
+                        ticketNumber = ticketNo,
+                        sessionKey = ticketSessionKey
+                    )
+                }
             }
         }
         
+        // For the top-level sessionKey, use the first ticket's sessionKey as default
+        // The server will prefer per-override session_key when available
         return MultiTicketCreateRequest(
             tirageIds = allTirageIds,
             entries = emptyList(),

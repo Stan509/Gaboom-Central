@@ -15,8 +15,8 @@ android {
         applicationId = "com.gaboom.agent"
         minSdk = 24
         targetSdk = 34
-        versionCode = 8
-        versionName = "6.0.2"
+        versionCode = 9
+        versionName = "6.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

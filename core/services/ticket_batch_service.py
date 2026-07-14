@@ -252,7 +252,15 @@ class TicketBatchService:
                     if is_closed and tolerated_closure:
                         logger.info(f"[BATCH] Tolerating closed draw {draw.nom} ({draw.id}) for offline ticket because it was created before closure.")
 
-                    if is_offline_sync and str(draw.session_key) != session_key:
+                    # Use per-override session_key if available (for mixed-session batches)
+                    draw_session_key = session_key
+                    override_entry = overrides.get(str(draw.id), {}) if overrides else {}
+                    if isinstance(override_entry, dict):
+                        override_sk = override_entry.get("session_key")
+                        if override_sk:
+                            draw_session_key = override_sk
+
+                    if is_offline_sync and str(draw.session_key) != draw_session_key:
                         ticket_created_at = body.get("created_at")
                         tolerated = False
                         if ticket_created_at:

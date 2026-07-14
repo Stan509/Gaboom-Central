@@ -189,7 +189,8 @@ data class MultiTicketCreateRequest(
 data class MultiTicketOverride(
     val entries: List<MultiTicketEntry>,
     @SerializedName("ticket_uuid") val ticketUuid: String? = null,
-    @SerializedName("ticket_number") val ticketNumber: String? = null
+    @SerializedName("ticket_number") val ticketNumber: String? = null,
+    @SerializedName("session_key") val sessionKey: String? = null
 )
 
 data class MultiTicketCreateResponse(

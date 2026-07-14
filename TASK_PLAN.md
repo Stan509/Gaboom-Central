@@ -1,41 +1,45 @@
-# Plan de Correction: Synchronisation des Tickets (Local-First - V2.9.7) - COMPLÉTÉ
+# Task Plan: Fix Offline Ticket Synchronization
 
-## Résumé des Corrections
+## Root Causes Identified
 
-### ✅ 1. GaboomAgentApp - Initialisation au démarrage
-- `OfflineLimitEnforcer` injecté et initialisé au démarrage (`recompute()` après 1s)
-- `SyncManager` injecté directement (plus via `Provider`) pour initialisation immédiate
-- Sync déclenché au démarrage si des tickets sont en attente
-- Boucle périodique de recompute toutes les 2 minutes
+### Bug 1: Session Key Mismatch in Batch Sync (MAIN BUG)
+- `SyncManager.buildCreateMultiRequest()` uses a single `sessionKey` (from first ticket) for ALL tirages in a batch
+- Different tirages can have different session keys after rotation
+- Server rejects with "Session expirée" when session key doesn't match
+- **Fix**: Add `session_key` to `MultiTicketOverride` and pass per-ticket session key
 
-### ✅ 2. OfflineLimitEnforcer - Temps de grâce
-- Ajout de `GRACE_PERIOD_MS = 2 minutes` après le démarrage de l'app
-- Si `lastContact == 0` mais app démarrée depuis < 2 min, ne pas bloquer
-- `getAppStartTime()` / `setAppStartTime()` ajouté à `AgentConfigDataStore`
-- `recordServerContact()` appelle automatiquement `recompute()`
+### Bug 2: Override `session_key` Not Used By Server
+- `TicketBatchService.create_tickets()` only checks top-level `body["session_key"]` against each draw
+- Never reads per-override `session_key`
+- **Fix**: Server should prefer override-level session_key when available
 
-### ✅ 3. SyncManager - Sync périodique
-- Boucle périodique toutes les 5 minutes pour relancer le sync si tickets en attente
-- Même mécanisme d'auto-sync au retour réseau préservé
+### Bug 3: Combined Batches Mix Tickets With Different Session Keys
+- `chunkPendingTicketsIntoBatches()` creates "combined_" batches that may mix tickets from different session keys
+- **Fix**: Group by session key per batch
 
-### ✅ 4. HeartbeatWorker - Recompute après chaque appel
-- `offlineLimitEnforcer.recompute()` appelé dans tous les cas (succès, 401, erreur, exception)
+## Changes Required
 
-### ✅ 5. Numéro de version
-- Version bump: 2.9.6 → 2.9.7 (versionCode 35 → 36)
-- Landing page mise à jour (v2.9.7)
-- APK en cours de build...
+### Android App (Kotlin)
+1. `Models.kt` - Add `sessionKey` to `MultiTicketOverride`
+2. `SyncManager.kt` - Pass per-ticket sessionKey to override in `buildCreateMultiRequest()`
 
-### 🔄 En cours
-- Build APK (assembleRelease) - ~82%
-- Copie APK vers static/
-- Git commit
+### Server (Python)
+3. `TicketBatchService.py` - Read per-override `session_key` when checking draw session
 
-## Fichiers modifiés
-1. `android_app/app/src/main/kotlin/com/gaboom/agent/GaboomAgentApp.kt` - Initialisation complète
-2. `android_app/app/src/main/kotlin/com/gaboom/agent/data/sync/OfflineLimitEnforcer.kt` - Grace period
-3. `android_app/app/src/main/kotlin/com/gaboom/agent/data/config/AgentConfigDataStore.kt` - App start time
-4. `android_app/app/src/main/kotlin/com/gaboom/agent/data/sync/SyncManager.kt` - Periodic sync
-5. `android_app/app/src/main/kotlin/com/gaboom/agent/data/sync/HeartbeatWorker.kt` - Recompute on all paths
-6. `android_app/app/build.gradle.kts` - Version bump
-7. `templates/landing/index.html` - Version display update
+### Build & Deploy
+4. Bump version to 6.1.0
+5. Rebuild APK
+6. Update landing page version
+7. Deploy APK to static/downloads/
+8. Commit to GitHub
+
+## Steps
+- [x] Analyze sync flow and identify root causes
+- [ ] Fix 1: Android - Add sessionKey to MultiTicketOverride (Models.kt)
+- [ ] Fix 2: Android - Pass per-ticket sessionKey to override (SyncManager.kt)
+- [ ] Fix 3: Server - Use per-override session_key (TicketBatchService.py)
+- [ ] Bump version to 6.1.0 (build.gradle.kts)
+- [ ] Build the APK
+- [ ] Update landing page with new version
+- [ ] Deploy APK to static/downloads/
+- [ ] Commit and push to GitHub

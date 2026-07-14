@@ -211,30 +211,64 @@ class TicketBatchService:
                         continue
 
                     if is_offline_sync and str(draw.session_key) != session_key:
-                        failed_tirages.append({
-                            "tirage_id": draw.id,
-                            "tirage_nom": draw.nom,
-                            "error": f"Session expirée pour {draw.nom}. Le tirage a été rouvert.",
-                        })
-                        log_audit(
-                            action=AuditAction.OFFLINE_SYNC_FAILED,
-                            entity_type="Ticket",
-                            entity_id="failed",
-                            borlette=borlette,
-                            actor_user=actor_user,
-                            actor_agent=agent,
-                            request=request,
-                            meta={
+                        ticket_created_at = body.get("created_at")
+                        tolerated = False
+                        if ticket_created_at:
+                            try:
+                                import datetime
+                                from accounts.models import Resultat
+
+                                tz = timezone.get_default_timezone()
+                                ticket_dt = datetime.datetime.fromtimestamp(
+                                    int(ticket_created_at) / 1000.0,
+                                    tz=datetime.timezone.utc
+                                ).astimezone(tz)
+
+                                results_exist = Resultat.objects.filter(
+                                    tirage=draw, session_key=session_key
+                                ).exists()
+
+                                if not results_exist:
+                                    if not draw.heure_fermeture:
+                                        tolerated = True
+                                    else:
+                                        closing_dt = datetime.datetime.combine(
+                                            ticket_dt.date(),
+                                            draw.heure_fermeture
+                                        )
+                                        closing_dt = timezone.make_aware(closing_dt, tz)
+                                        if ticket_dt <= closing_dt:
+                                            tolerated = True
+                            except Exception as e:
+                                logger.error(f"[BATCH] Error checking offline ticket creation window: {e}")
+
+                        if tolerated:
+                            logger.info(f"[BATCH] Tolerating session key mismatch for draw {draw.nom} ({draw.id}) as it was created before closure and results are not published.")
+                        else:
+                            failed_tirages.append({
                                 "tirage_id": draw.id,
                                 "tirage_nom": draw.nom,
-                                "error": "session_key mismatch",
-                                "expected_session": session_key,
-                                "actual_session": str(draw.session_key),
-                                "device_id": device_id if is_offline_sync else None,
-                                "batch_id": str(group_id),
-                            },
-                        )
-                        continue
+                                "error": f"Session expirée pour {draw.nom}. Le tirage a été rouvert.",
+                            })
+                            log_audit(
+                                action=AuditAction.OFFLINE_SYNC_FAILED,
+                                entity_type="Ticket",
+                                entity_id="failed",
+                                borlette=borlette,
+                                actor_user=actor_user,
+                                actor_agent=agent,
+                                request=request,
+                                meta={
+                                    "tirage_id": draw.id,
+                                    "tirage_nom": draw.nom,
+                                    "error": "session_key mismatch",
+                                    "expected_session": session_key,
+                                    "actual_session": str(draw.session_key),
+                                    "device_id": device_id if is_offline_sync else None,
+                                    "batch_id": str(group_id),
+                                },
+                            )
+                            continue
 
                     tirage_entries = overrides.get(str(draw.id), {}).get("entries", entries)
 

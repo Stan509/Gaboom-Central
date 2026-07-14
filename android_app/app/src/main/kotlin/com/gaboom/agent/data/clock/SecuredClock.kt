@@ -63,6 +63,14 @@ object SecuredClock {
     }
     
     fun now(): Long {
+        val serverTime = lastServerTime
+        val elapsed = lastSyncElapsedRealtime
+        if (serverTime > 0L && elapsed > 0L) {
+            val currentElapsed = SystemClock.elapsedRealtime()
+            if (currentElapsed >= elapsed) {
+                return serverTime + (currentElapsed - elapsed)
+            }
+        }
         return System.currentTimeMillis()
     }
 }

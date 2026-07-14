@@ -117,7 +117,7 @@ class TicketRepository @Inject constructor(
         sessionKey: String?
     ): MultiTicketCreateResponse {
         val groupId = UUID.randomUUID().toString()
-        val now = System.currentTimeMillis()
+        val now = com.gaboom.agent.data.clock.SecuredClock.now()
         val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
 
         val ticketsList = tirageIds.map { tirageId ->

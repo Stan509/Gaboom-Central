@@ -902,8 +902,8 @@ class VenteViewModel @Inject constructor(
                     tirageIds = selectedIds,
                     entries = entries,
                     sessionKey = sessionKey,
-                    createdAt = System.currentTimeMillis(),
-                    clientTime = System.currentTimeMillis()
+                    createdAt = com.gaboom.agent.data.clock.SecuredClock.now(),
+                    clientTime = com.gaboom.agent.data.clock.SecuredClock.now()
                 )
 
                 // Phase 3: All ticket creations are local-first
@@ -1277,8 +1277,8 @@ class VenteViewModel @Inject constructor(
                     tirageIds = selectedIds,
                     entries = entries,
                     sessionKey = sessionKey,
-                    createdAt = System.currentTimeMillis(),
-                    clientTime = System.currentTimeMillis()
+                    createdAt = com.gaboom.agent.data.clock.SecuredClock.now(),
+                    clientTime = com.gaboom.agent.data.clock.SecuredClock.now()
                 )
 
                 // Phase 3: All ticket creations are local-first (see TicketRepository)

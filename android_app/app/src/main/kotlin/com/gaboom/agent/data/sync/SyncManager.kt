@@ -352,7 +352,7 @@ class SyncManager @Inject constructor(
             overrides = overrides,
             sessionKey = firstTicket.sessionKey,
             createdAt = firstTicket.createdAt,
-            clientTime = System.currentTimeMillis()
+            clientTime = com.gaboom.agent.data.clock.SecuredClock.now()
         )
     }
     

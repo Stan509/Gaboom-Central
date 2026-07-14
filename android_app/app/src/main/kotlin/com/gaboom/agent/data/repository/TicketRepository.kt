@@ -120,6 +120,8 @@ class TicketRepository @Inject constructor(
         val now = com.gaboom.agent.data.clock.SecuredClock.now()
         val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
 
+        val cachedTirages = agentConfigDataStore.getCachedTirages()
+
         val ticketsList = tirageIds.map { tirageId ->
             val localId = UUID.randomUUID().toString()
 
@@ -127,10 +129,13 @@ class TicketRepository @Inject constructor(
             val seqNumber = agentConfigDataStore.getAndIncrementTicketNumber()
             val localTicketNo = seqNumber.toString()
 
+            // Try to find the correct session key for this specific draw
+            val correctSessionKey = cachedTirages.find { it.id == tirageId }?.sessionKey ?: sessionKey ?: ""
+
             val multiRequest = MultiTicketCreateRequest(
                 tirageIds = listOf(tirageId),
                 entries = entries,
-                sessionKey = sessionKey,
+                sessionKey = correctSessionKey,
                 createdAt = now,
                 clientTime = now
             )
@@ -143,7 +148,7 @@ class TicketRepository @Inject constructor(
                 HmacUtil.signPayload(
                     deviceSecret = deviceCreds.deviceSecret,
                     payloadJson = payloadJson,
-                    sessionKey = sessionKey ?: ""
+                    sessionKey = correctSessionKey
                 )
             } else null
 
@@ -153,7 +158,7 @@ class TicketRepository @Inject constructor(
                 payloadJson = payloadJson,
                 tirageIds = tirageIds.joinToString(","),
                 tirageId = tirageId,
-                sessionKey = sessionKey,
+                sessionKey = correctSessionKey,
                 totalMise = entries.sumOf { it.stake },
                 linesSummary = linesSummary,
                 syncStatus = SyncStatus.LOCAL_PENDING,
@@ -190,7 +195,7 @@ class TicketRepository @Inject constructor(
                 LocalTicketCache(
                     ticketUuid = localId,
                     tirageId = tirageId,
-                    sessionKey = sessionKey ?: "",
+                    sessionKey = correctSessionKey,
                     ticketNo = localTicketNo,
                     totalMise = entries.sumOf { it.stake },
                     createdAt = now,

@@ -219,12 +219,16 @@ class TicketBatchService:
                                     ).exists()
 
                                 if not results_exist:
-                                    if not draw.heure_fermeture:
+                                    closing_time = draw.heure_fermeture
+                                    if not closing_time and draw.heure_tirage:
+                                        closing_time = (datetime.datetime.combine(datetime.date.min, draw.heure_tirage) - datetime.timedelta(minutes=3)).time()
+
+                                    if not closing_time:
                                         tolerated_closure = True
                                     else:
                                         closing_dt = datetime.datetime.combine(
                                             ticket_dt.date(),
-                                            draw.heure_fermeture
+                                            closing_time
                                         )
                                         closing_dt = timezone.make_aware(closing_dt, tz)
                                         if ticket_dt <= closing_dt:
@@ -284,12 +288,16 @@ class TicketBatchService:
                                     ).exists()
 
                                 if not results_exist:
-                                    if not draw.heure_fermeture:
+                                    closing_time = draw.heure_fermeture
+                                    if not closing_time and draw.heure_tirage:
+                                        closing_time = (datetime.datetime.combine(datetime.date.min, draw.heure_tirage) - datetime.timedelta(minutes=3)).time()
+
+                                    if not closing_time:
                                         tolerated = True
                                     else:
                                         closing_dt = datetime.datetime.combine(
                                             ticket_dt.date(),
-                                            draw.heure_fermeture
+                                            closing_time
                                         )
                                         closing_dt = timezone.make_aware(closing_dt, tz)
                                         if ticket_dt <= closing_dt:

@@ -765,11 +765,16 @@ def api_ticket_create_multi(request: HttpRequest) -> JsonResponse:
 
     tirage_ids = body.get("tirage_ids", [])
     entries = body.get("entries", [])
+    overrides = body.get("overrides", {})
     session_key = body.get("session_key", "")
+
+    has_entries = bool(entries) or any(
+        ov.get("entries") for ov in overrides.values() if isinstance(ov, dict)
+    )
 
     if not tirage_ids:
         return _json_error("Aucun tirage sélectionné", 400)
-    if not entries:
+    if not has_entries:
         return _json_error("Aucune ligne de mise", 400)
 
     # Check if this is an offline sync (has HMAC headers)

@@ -185,7 +185,41 @@ class TicketBatchService:
                         statut=TirageStatus.ACTIF,
                     )
 
-                    if draw.etat_ouverture != "OUVERT":
+                    is_closed = draw.etat_ouverture != "OUVERT"
+                    tolerated_closure = False
+
+                    if is_closed and is_offline_sync:
+                        ticket_created_at = body.get("created_at")
+                        if ticket_created_at:
+                            try:
+                                import datetime
+                                from accounts.models import Resultat
+
+                                tz = timezone.get_default_timezone()
+                                ticket_dt = datetime.datetime.fromtimestamp(
+                                    int(ticket_created_at) / 1000.0,
+                                    tz=datetime.timezone.utc
+                                ).astimezone(tz)
+
+                                results_exist = Resultat.objects.filter(
+                                    tirage=draw, session_key=session_key
+                                ).exists()
+
+                                if not results_exist:
+                                    if not draw.heure_fermeture:
+                                        tolerated_closure = True
+                                    else:
+                                        closing_dt = datetime.datetime.combine(
+                                            ticket_dt.date(),
+                                            draw.heure_fermeture
+                                        )
+                                        closing_dt = timezone.make_aware(closing_dt, tz)
+                                        if ticket_dt <= closing_dt:
+                                            tolerated_closure = True
+                            except Exception as e:
+                                logger.error(f"[BATCH] Error checking closed draw window: {e}")
+
+                    if is_closed and not tolerated_closure:
                         failed_tirages.append({
                             "tirage_id": draw.id,
                             "tirage_nom": draw.nom,
@@ -209,6 +243,9 @@ class TicketBatchService:
                             },
                         )
                         continue
+
+                    if is_closed and tolerated_closure:
+                        logger.info(f"[BATCH] Tolerating closed draw {draw.nom} ({draw.id}) for offline ticket because it was created before closure.")
 
                     if is_offline_sync and str(draw.session_key) != session_key:
                         ticket_created_at = body.get("created_at")

@@ -42,6 +42,8 @@ CSRF_TRUSTED_ORIGINS = [
     'http://10.0.0.55:8000',
     'http://10.0.0.124:8000',
     'https://*.ondigitalocean.app',
+    'https://gaboombos.com',
+    'https://www.gaboombos.com',
 ]
 
 

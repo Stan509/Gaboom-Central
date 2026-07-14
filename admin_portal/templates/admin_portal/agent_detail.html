@@ -244,6 +244,34 @@
 
   function fmt(n) { return (n || 0).toLocaleString('fr-FR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' G'; }
 
+  function copyTextToClipboard(text, successMsg) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        alert(successMsg);
+      }).catch(err => {
+        fallbackCopy(text, successMsg);
+      });
+    } else {
+      fallbackCopy(text, successMsg);
+    }
+  }
+
+  function fallbackCopy(text, successMsg) {
+    try {
+      const temp = document.createElement('textarea');
+      temp.value = text;
+      temp.style.position = 'fixed';
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand('copy');
+      document.body.removeChild(temp);
+      alert(successMsg);
+    } catch (err) {
+      console.error('Copy failed:', err);
+      alert('Lien: ' + text);
+    }
+  }
+
   let map;
   let marker;
   let polyline;
@@ -365,9 +393,7 @@
               url: mapsUrl
             }).catch(console.error);
           } else {
-            navigator.clipboard.writeText(mapsUrl).then(() => {
-              alert("Lien copié dans le presse-papier !");
-            });
+            copyTextToClipboard(mapsUrl, "Lien copié dans le presse-papier !");
           }
         };
       }

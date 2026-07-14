@@ -374,6 +374,108 @@ class CreateMultiEndpointTests(TestCase):
         self.assertIsNotNone(audit)
         self.assertEqual(audit.actor_agent, self.agent)
 
+    @patch('agent_portal.api_views._get_agent_from_request')
+    def test_create_multi_offline_sync_success_within_25_minutes(self, mock_get_agent):
+        """Offline ticket sync succeeds when within 25 minutes and clocks are good"""
+        mock_get_agent.return_value = self.agent
+        
+        now_ms = int(timezone.now().timestamp() * 1000)
+        payload = {
+            "tirage_ids": [self.tirage1.id],
+            "entries": [
+                {"game": "boule", "number": "34", "stake": 50.0}
+            ],
+            "session_key": self.session_key,
+            "created_at": now_ms - (10 * 60 * 1000),  # 10 minutes ago
+            "client_time": now_ms  # no drift
+        }
+        
+        signature, _ = self._calculate_hmac(
+            payload, self.session_key, self.device.device_secret
+        )
+        
+        response = self.client.post(
+            "/api/agent/ticket/create-multi/",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._get_auth_headers(self.agent),
+            HTTP_X_DEVICE_ID=self.device.device_id,
+            HTTP_X_PAYLOAD_SIGN=signature
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertEqual(data["tickets"][0]["status"], "VALIDE")
+
+    @patch('agent_portal.api_views._get_agent_from_request')
+    def test_create_multi_offline_sync_fails_after_25_minutes(self, mock_get_agent):
+        """Offline ticket sync fails (status ANNULE) when ticket is older than 25 minutes"""
+        mock_get_agent.return_value = self.agent
+        
+        now_ms = int(timezone.now().timestamp() * 1000)
+        payload = {
+            "tirage_ids": [self.tirage1.id],
+            "entries": [
+                {"game": "boule", "number": "34", "stake": 50.0}
+            ],
+            "session_key": self.session_key,
+            "created_at": now_ms - (26 * 60 * 1000),  # 26 minutes ago (> 25min)
+            "client_time": now_ms  # no drift
+        }
+        
+        signature, _ = self._calculate_hmac(
+            payload, self.session_key, self.device.device_secret
+        )
+        
+        response = self.client.post(
+            "/api/agent/ticket/create-multi/",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._get_auth_headers(self.agent),
+            HTTP_X_DEVICE_ID=self.device.device_id,
+            HTTP_X_PAYLOAD_SIGN=signature
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertEqual(data["tickets"][0]["status"], "ANNULE")
+
+    @patch('agent_portal.api_views._get_agent_from_request')
+    def test_create_multi_offline_sync_fails_with_drift(self, mock_get_agent):
+        """Offline ticket sync fails (status ANNULE) when clock drift exceeds 45 seconds"""
+        mock_get_agent.return_value = self.agent
+        
+        now_ms = int(timezone.now().timestamp() * 1000)
+        payload = {
+            "tirage_ids": [self.tirage1.id],
+            "entries": [
+                {"game": "boule", "number": "34", "stake": 50.0}
+            ],
+            "session_key": self.session_key,
+            "created_at": now_ms - (5 * 60 * 1000),  # 5 minutes ago
+            "client_time": now_ms - 60000  # 60 seconds drift (> 45s)
+        }
+        
+        signature, _ = self._calculate_hmac(
+            payload, self.session_key, self.device.device_secret
+        )
+        
+        response = self.client.post(
+            "/api/agent/ticket/create-multi/",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._get_auth_headers(self.agent),
+            HTTP_X_DEVICE_ID=self.device.device_id,
+            HTTP_X_PAYLOAD_SIGN=signature
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertEqual(data["tickets"][0]["status"], "ANNULE")
+
 
 class BlueprintEndpointTests(TestCase):
     """Tests for GET /api/agent/ticket/<uuid>/blueprint/"""

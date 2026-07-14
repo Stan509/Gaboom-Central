@@ -429,16 +429,43 @@ class TicketBatchService:
                         ticket_number_to_use = _generate_ticket_number()
 
                     ticket_statut = TicketStatus.VALIDE
-                    client_time = body.get("client_time") or body.get("created_at")
-                    if client_time:
-                        try:
-                            server_now_ms = int(timezone.now().timestamp() * 1000)
-                            drift_ms = abs(server_now_ms - int(client_time))
-                            if drift_ms > 45000:
-                                logger.warning(f"[BATCH] Clock drift {drift_ms}ms exceeded 45s for ticket {ticket_uuid}. Creating as ANNULE.")
-                                ticket_statut = TicketStatus.ANNULE
-                        except Exception as e:
-                            logger.error(f"[BATCH] Error validating clock drift: {e}")
+                    if is_offline_sync:
+                        # For offline sync:
+                        # 1. Verify clock drift (client sync time vs server current time)
+                        client_time = body.get("client_time")
+                        if client_time:
+                            try:
+                                server_now_ms = int(timezone.now().timestamp() * 1000)
+                                drift_ms = abs(server_now_ms - int(client_time))
+                                if drift_ms > 45000:
+                                    logger.warning(f"[BATCH] Clock drift {drift_ms}ms exceeded 45s for ticket {ticket_uuid}. Creating as ANNULE.")
+                                    ticket_statut = TicketStatus.ANNULE
+                            except Exception as e:
+                                logger.error(f"[BATCH] Error validating clock drift: {e}")
+                        
+                        # 2. Verify 25-minute creation window (ticket creation time vs server current time)
+                        ticket_created_at = body.get("created_at")
+                        if ticket_created_at:
+                            try:
+                                server_now_ms = int(timezone.now().timestamp() * 1000)
+                                age_ms = server_now_ms - int(ticket_created_at)
+                                if age_ms > 25 * 60 * 1000:  # 25 minutes
+                                    logger.warning(f"[BATCH] Ticket {ticket_uuid} created too long ago ({age_ms}ms ago). Creating as ANNULE.")
+                                    ticket_statut = TicketStatus.ANNULE
+                            except Exception as e:
+                                logger.error(f"[BATCH] Error validating ticket age: {e}")
+                    else:
+                        # For online tickets: use standard drift check with fallback
+                        client_time = body.get("client_time") or body.get("created_at")
+                        if client_time:
+                            try:
+                                server_now_ms = int(timezone.now().timestamp() * 1000)
+                                drift_ms = abs(server_now_ms - int(client_time))
+                                if drift_ms > 45000:
+                                    logger.warning(f"[BATCH] Clock drift {drift_ms}ms exceeded 45s for ticket {ticket_uuid}. Creating as ANNULE.")
+                                    ticket_statut = TicketStatus.ANNULE
+                            except Exception as e:
+                                logger.error(f"[BATCH] Error validating clock drift: {e}")
 
                     ticket = Ticket.objects.create(
                         id=ticket_id_to_use,

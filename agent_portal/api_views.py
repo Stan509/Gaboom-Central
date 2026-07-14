@@ -365,14 +365,20 @@ def api_login(request: HttpRequest) -> JsonResponse:
 
     # Get or create device registration for ticket number range
     from accounts.models import AgentDevice
+    import secrets
     device, created = AgentDevice.objects.get_or_create(
         agent=agent,
         device_id=device_signature,
         defaults={
             "device_name": f"Device-{device_signature[:8]}",
+            "device_secret": secrets.token_urlsafe(32),
             "is_active": True,
         }
     )
+    
+    if not device.device_secret:
+        device.device_secret = secrets.token_urlsafe(32)
+        device.save(update_fields=["device_secret"])
     
     if created:
         # New device - log registration

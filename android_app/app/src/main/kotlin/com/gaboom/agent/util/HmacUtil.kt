@@ -29,6 +29,9 @@ object HmacUtil {
      * @return Hex-encoded HMAC signature
      */
     fun signPayload(deviceSecret: String, payloadJson: String, sessionKey: String): String {
+        if (deviceSecret.isEmpty()) {
+            return ""
+        }
         val canonical = canonicalizeJson(payloadJson)
         val message = "$canonical$sessionKey"
         val keySpec = SecretKeySpec(deviceSecret.toByteArray(Charsets.UTF_8), HMAC_ALGORITHM)

@@ -16,7 +16,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.audit import log_audit
-from accounts.models import AuditAction, Agent, Borlette
+from accounts.models import AuditAction, Agent, Borlette, AgentDevice
 from core.services.risk_management_service import RiskManagementService
 from core.services.ticket_validation_service import TicketValidationService
 
@@ -185,6 +185,14 @@ class TicketBatchService:
                         statut=TirageStatus.ACTIF,
                     )
 
+                    # Use per-override session_key if available (for mixed-session batches)
+                    draw_session_key = session_key
+                    override_entry = overrides.get(str(draw.id), {}) if overrides else {}
+                    if isinstance(override_entry, dict):
+                        override_sk = override_entry.get("session_key")
+                        if override_sk:
+                            draw_session_key = override_sk
+
                     is_closed = draw.etat_ouverture != "OUVERT"
                     tolerated_closure = False
 
@@ -207,7 +215,7 @@ class TicketBatchService:
                                     ).exists()
                                 else:
                                     results_exist = Resultat.objects.filter(
-                                        tirage=draw, session_key=session_key
+                                        tirage=draw, session_key=draw_session_key
                                     ).exists()
 
                                 if not results_exist:
@@ -242,7 +250,7 @@ class TicketBatchService:
                                 "tirage_id": draw.id,
                                 "tirage_nom": draw.nom,
                                 "error": "tirage fermé",
-                                "session_key": session_key,
+                                "session_key": draw_session_key,
                                 "device_id": device_id if is_offline_sync else None,
                                 "batch_id": str(group_id),
                             },
@@ -251,14 +259,6 @@ class TicketBatchService:
 
                     if is_closed and tolerated_closure:
                         logger.info(f"[BATCH] Tolerating closed draw {draw.nom} ({draw.id}) for offline ticket because it was created before closure.")
-
-                    # Use per-override session_key if available (for mixed-session batches)
-                    draw_session_key = session_key
-                    override_entry = overrides.get(str(draw.id), {}) if overrides else {}
-                    if isinstance(override_entry, dict):
-                        override_sk = override_entry.get("session_key")
-                        if override_sk:
-                            draw_session_key = override_sk
 
                     if is_offline_sync and str(draw.session_key) != draw_session_key:
                         ticket_created_at = body.get("created_at")
@@ -280,7 +280,7 @@ class TicketBatchService:
                                     ).exists()
                                 else:
                                     results_exist = Resultat.objects.filter(
-                                        tirage=draw, session_key=session_key
+                                        tirage=draw, session_key=draw_session_key
                                     ).exists()
 
                                 if not results_exist:
@@ -411,7 +411,22 @@ class TicketBatchService:
                             continue
 
                     ticket_id_to_use = uuid.UUID(ticket_uuid) if ticket_uuid else uuid.uuid4()
-                    ticket_number_to_use = ticket_number if ticket_number else _generate_ticket_number()
+                    
+                    # For offline sync, use the ticket number from the device range
+                    # For online tickets, generate timestamp-based number
+                    if is_offline_sync and ticket_number:
+                        ticket_number_to_use = ticket_number
+                        # Update device's ticket number current to ensure consistency
+                        try:
+                            device = AgentDevice.objects.get(device_id=device_id, agent=agent, is_active=True)
+                            ticket_num_long = int(ticket_number)
+                            if ticket_num_long > device.ticket_number_current:
+                                device.ticket_number_current = ticket_num_long
+                                device.save(update_fields=["ticket_number_current"])
+                        except AgentDevice.DoesNotExist:
+                            logger.warning(f"[BATCH] Device not found for ticket number update: {device_id}")
+                    else:
+                        ticket_number_to_use = _generate_ticket_number()
 
                     ticket_statut = TicketStatus.VALIDE
                     client_time = body.get("client_time") or body.get("created_at")

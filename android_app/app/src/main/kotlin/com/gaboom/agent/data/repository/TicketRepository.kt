@@ -123,9 +123,9 @@ class TicketRepository @Inject constructor(
         val ticketsList = tirageIds.map { tirageId ->
             val localId = UUID.randomUUID().toString()
 
-            // Allocate official number from device range (CB-YYYY-N)
+            // Allocate official number from server-allocated device range
             val seqNumber = agentConfigDataStore.getAndIncrementTicketNumber()
-            val localTicketNo = "CB-$year-$seqNumber"
+            val localTicketNo = seqNumber.toString()
 
             val multiRequest = MultiTicketCreateRequest(
                 tirageIds = listOf(tirageId),

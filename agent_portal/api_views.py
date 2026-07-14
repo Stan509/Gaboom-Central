@@ -363,6 +363,30 @@ def api_login(request: HttpRequest) -> JsonResponse:
     user.device_signature = device_signature
     user.save(update_fields=["active_session_id", "device_signature"])
 
+    # Get or create device registration for ticket number range
+    from accounts.models import AgentDevice
+    device, created = AgentDevice.objects.get_or_create(
+        agent=agent,
+        device_id=device_signature,
+        defaults={
+            "device_name": f"Device-{device_signature[:8]}",
+            "is_active": True,
+        }
+    )
+    
+    if created:
+        # New device - log registration
+        from accounts.audit import log_audit
+        from accounts.models import AuditAction
+        log_audit(
+            borlette=agent.borlette,
+            actor_user=user,
+            actor_agent=agent,
+            action=AuditAction.DEVICE_REGISTER,
+            entity_type="AgentDevice",
+            entity_id=str(device.id),
+            meta={"device_id": device.device_id, "device_name": device.device_name}
+        )
 
     # Générer tokens JWT
     refresh = RefreshToken.for_user(user)
@@ -387,6 +411,13 @@ def api_login(request: HttpRequest) -> JsonResponse:
             "ticket_footer_text": agent.borlette.ticket_footer_text or "La fiche est payable une seule fois au porteur. Le montant gagné devra être réclamé avant 90 jours",
             "mariage_gratuit_actif": _get_mariage_actif(agent.borlette),
             "mariage_gratuit_montant": str(_get_mariage_montant(agent.borlette)),
+        },
+        "device": {
+            "device_id": device.device_id,
+            "device_secret": device.device_secret,
+            "ticket_number_start": device.ticket_number_start,
+            "ticket_number_end": device.ticket_number_end,
+            "ticket_number_current": device.ticket_number_current,
         },
         "tokens": {
             "access": str(refresh.access_token),

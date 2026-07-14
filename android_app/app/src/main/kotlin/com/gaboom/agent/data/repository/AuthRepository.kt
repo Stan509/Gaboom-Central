@@ -57,8 +57,22 @@ class AuthRepository @Inject constructor(
                         borlette = body.borlette
                     )
                     
-                    // Phase I-A: Register device for HMAC signing and fetch config
-                    registerDeviceAndFetchConfig()
+                    // Save device credentials and ticket number range from login response
+                    body.device?.let { deviceInfo ->
+                        agentConfigDataStore.saveDeviceCredentials(
+                            deviceId = deviceInfo.deviceId,
+                            deviceSecret = deviceInfo.deviceSecret,
+                            deviceName = "Android Agent App"
+                        )
+                        agentConfigDataStore.saveTicketNumberRange(
+                            start = deviceInfo.ticketNumberStart,
+                            end = deviceInfo.ticketNumberEnd,
+                            current = deviceInfo.ticketNumberCurrent
+                        )
+                    }
+                    
+                    // Phase I-A: Fetch agent config (allow_offline_print, etc.)
+                    fetchAgentConfig()
                     
                     Result.success(Unit)
                 } else {
@@ -73,41 +87,19 @@ class AuthRepository @Inject constructor(
     }
     
     /**
-     * Phase I-A: Register device for offline HMAC signing and fetch agent config.
+     * Phase I-A: Fetch agent config (allow_offline_print, etc.)
+     * Device credentials and ticket range are now provided in login response
      */
-    private suspend fun registerDeviceAndFetchConfig() {
+    private suspend fun fetchAgentConfig() {
         try {
-            // Check if device already registered
             val existingCreds = agentConfigDataStore.getDeviceCredentials()
-            var activeDeviceId = existingCreds?.deviceId
-            if (activeDeviceId == null) {
-                // Register new device
-                val deviceResponse = apiService.registerDevice(DeviceRegisterRequest("Android Agent App"))
-                if (deviceResponse.isSuccessful && deviceResponse.body()?.success == true) {
-                    val deviceBody = deviceResponse.body()!!
-                    deviceBody.deviceId?.let { deviceId ->
-                        activeDeviceId = deviceId
-                        deviceBody.deviceSecret?.let { deviceSecret ->
-                            agentConfigDataStore.saveDeviceCredentials(deviceId, deviceSecret, "Android Agent App")
-                        }
-                    }
-                }
-            }
+            val activeDeviceId = existingCreds?.deviceId ?: return
             
             // Fetch agent config (allow_offline_print, etc.)
-            val configResponse = apiService.getAgentConfig(activeDeviceId ?: "")
+            val configResponse = apiService.getAgentConfig(activeDeviceId)
             if (configResponse.isSuccessful && configResponse.body()?.success == true) {
                 val configBody = configResponse.body()!!
                 agentConfigDataStore.setAllowOfflinePrint(configBody.allowOfflinePrint)
-                
-                // Save range configuration
-                configBody.range?.let { range ->
-                    agentConfigDataStore.saveTicketNumberRange(
-                        start = range.ticketNumberStart,
-                        end = range.ticketNumberEnd,
-                        current = range.ticketNumberCurrent
-                    )
-                }
                 
                 // Update cached borlette configuration dynamically
                 configBody.borlette?.let { borlette ->
@@ -125,8 +117,7 @@ class AuthRepository @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            // Non-blocking: device registration failure shouldn't prevent login
-            // The sync will fail later with clear error message
+            // Non-blocking: config fetch failure shouldn't prevent login
             e.printStackTrace()
         }
     }

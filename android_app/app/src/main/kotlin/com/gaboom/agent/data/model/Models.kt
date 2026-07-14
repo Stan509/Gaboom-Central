@@ -21,7 +21,16 @@ data class LoginResponse(
     val agent: AgentInfo?,
     val borlette: BorletteInfo?,
     val tokens: TokenPair?,
+    val device: DeviceInfo?,
     val error: String?
+)
+
+data class DeviceInfo(
+    @SerializedName("device_id") val deviceId: String,
+    @SerializedName("device_secret") val deviceSecret: String,
+    @SerializedName("ticket_number_start") val ticketNumberStart: Long,
+    @SerializedName("ticket_number_end") val ticketNumberEnd: Long,
+    @SerializedName("ticket_number_current") val ticketNumberCurrent: Long
 )
 
 data class AgentInfo(

@@ -409,8 +409,8 @@ class CreateMultiEndpointTests(TestCase):
         self.assertEqual(data["tickets"][0]["status"], "VALIDE")
 
     @patch('agent_portal.api_views._get_agent_from_request')
-    def test_create_multi_offline_sync_fails_after_25_minutes(self, mock_get_agent):
-        """Offline ticket sync fails (status ANNULE) when ticket is older than 25 minutes"""
+    def test_create_multi_offline_sync_succeeds_after_25_minutes(self, mock_get_agent):
+        """Offline ticket sync succeeds (status VALIDE) even when ticket is older than 25 minutes"""
         mock_get_agent.return_value = self.agent
         
         now_ms = int(timezone.now().timestamp() * 1000)
@@ -440,7 +440,7 @@ class CreateMultiEndpointTests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data["success"])
-        self.assertEqual(data["tickets"][0]["status"], "ANNULE")
+        self.assertEqual(data["tickets"][0]["status"], "VALIDE")
 
     @patch('agent_portal.api_views._get_agent_from_request')
     def test_create_multi_offline_sync_fails_with_drift(self, mock_get_agent):

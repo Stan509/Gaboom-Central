@@ -1,11 +1,15 @@
 package com.gaboom.agent.data.sync
 
 import android.util.Log
-import com.gaboom.agent.data.clock.SecuredClock
+import com.gaboom.agent.data.network.NetworkMonitor
 import com.gaboom.agent.data.config.AgentConfigDataStore
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -55,11 +59,22 @@ data class SaleGateState(
  */
 @Singleton
 class OfflineLimitEnforcer @Inject constructor(
-    private val agentConfigDataStore: AgentConfigDataStore
+    private val agentConfigDataStore: AgentConfigDataStore,
+    private val networkMonitor: NetworkMonitor
 ) {
 
     private val _gateState = MutableStateFlow(SaleGateState())
     val gateState: StateFlow<SaleGateState> = _gateState.asStateFlow()
+
+    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+
+    init {
+        scope.launch {
+            networkMonitor.isOnline.collect {
+                recompute()
+            }
+        }
+    }
 
     /**
      * Call this after every successful server response (including heartbeat).
@@ -86,6 +101,16 @@ class OfflineLimitEnforcer @Inject constructor(
         val now = System.currentTimeMillis()
         val lastContact = agentConfigDataStore.getLastServerContactAt()
         val inMaintenance = agentConfigDataStore.isServerInMaintenance()
+
+        // ── Online bypass: never block offline timer if currently connected ──
+        if (networkMonitor.isCurrentlyOnline()) {
+            Log.d(TAG, "Device is online, bypassing offline 25-min limit check.")
+            _gateState.value = SaleGateState(
+                reason = SaleBlockedReason.NONE,
+                minutesBeforeBlock = null
+            )
+            return
+        }
 
         // ── Clock drift check (Removed) ──────────────────────────────────────
 

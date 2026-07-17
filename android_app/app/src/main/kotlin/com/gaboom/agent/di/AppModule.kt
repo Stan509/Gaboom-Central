@@ -157,8 +157,9 @@ object AppModule {
     @Provides
     @Singleton
     fun provideOfflineLimitEnforcer(
-        agentConfigDataStore: AgentConfigDataStore
+        agentConfigDataStore: AgentConfigDataStore,
+        networkMonitor: NetworkMonitor
     ): com.gaboom.agent.data.sync.OfflineLimitEnforcer {
-        return com.gaboom.agent.data.sync.OfflineLimitEnforcer(agentConfigDataStore)
+        return com.gaboom.agent.data.sync.OfflineLimitEnforcer(agentConfigDataStore, networkMonitor)
     }
 }

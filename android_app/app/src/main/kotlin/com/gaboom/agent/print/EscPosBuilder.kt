@@ -240,20 +240,7 @@ object EscPosBuilder {
         buffer.addAll("Tirage(s): ${data.tirages.joinToString(", ")}".stripAccents().toByteArray(Charsets.UTF_8).toList())
         buffer.add(LF)
 
-        // Phase I-A2: Offline watermark
-        if (data.isOffline) {
-            buffer.add(LF)
-            buffer.addAll(ALIGN_CENTER.toList())
-            buffer.addAll(BOLD_ON.toList())
-            buffer.addAll(DOUBLE_HEIGHT_ON.toList())
-            buffer.addAll("*** OFFLINE ***".toByteArray(Charsets.UTF_8).toList())
-            buffer.add(LF)
-            buffer.addAll(NORMAL_SIZE.toList())
-            buffer.addAll(BOLD_OFF.toList())
-            buffer.addAll(ALIGN_LEFT.toList())
-            buffer.addAll("A valider en ligne".stripAccents().toByteArray(Charsets.UTF_8).toList())
-            buffer.add(LF)
-        }
+
 
         buffer.addAll("--------------------------------".toByteArray(Charsets.UTF_8).toList())
         buffer.add(LF)

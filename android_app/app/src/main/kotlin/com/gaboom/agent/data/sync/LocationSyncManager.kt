@@ -20,7 +20,8 @@ class LocationSyncManager @Inject constructor(
     private val locationQueueDao: LocationQueueDao,
     private val networkMonitor: NetworkMonitor,
     private val syncManagerProvider: Provider<SyncManager>,
-    private val dynamicRetrofitProvider: DynamicRetrofitProvider
+    private val dynamicRetrofitProvider: DynamicRetrofitProvider,
+    private val offlineLimitEnforcer: OfflineLimitEnforcer
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var syncJob: Job? = null
@@ -80,6 +81,7 @@ class LocationSyncManager @Inject constructor(
                         val response = apiService.heartbeat(req)
                         if (response.isSuccessful) {
                             locationQueueDao.deleteById(location.id)
+                            offlineLimitEnforcer.recordServerContact()
                             Log.d(TAG, "Successfully uploaded queued location: (${location.latitude}, ${location.longitude})")
                         } else {
                             Log.e(TAG, "Failed uploading queued location: HTTP ${response.code()}")

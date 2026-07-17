@@ -139,7 +139,8 @@ object AppModule {
         syncPolicy: com.gaboom.agent.policy.SyncPolicy,
         gson: Gson,
         agentConfigDataStore: AgentConfigDataStore,
-        localTicketCacheDao: com.gaboom.agent.data.local.LocalTicketCacheDao
+        localTicketCacheDao: com.gaboom.agent.data.local.LocalTicketCacheDao,
+        offlineLimitEnforcer: com.gaboom.agent.data.sync.OfflineLimitEnforcer
     ): SyncManager {
         return SyncManager(
             pendingTicketDao = pendingTicketDao,
@@ -148,7 +149,8 @@ object AppModule {
             syncPolicy = syncPolicy,
             gson = gson,
             agentConfigDataStore = agentConfigDataStore,
-            localTicketCacheDao = localTicketCacheDao
+            localTicketCacheDao = localTicketCacheDao,
+            offlineLimitEnforcer = offlineLimitEnforcer
         )
     }
 

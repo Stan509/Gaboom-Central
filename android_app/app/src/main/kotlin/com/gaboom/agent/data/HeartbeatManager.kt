@@ -22,13 +22,19 @@ import javax.inject.Singleton
  * Manages periodic heartbeat calls to keep agent online status updated.
  * Calls POST /api/agent/heartbeat/ every 60 seconds with location coordinates when active.
  */
+import com.gaboom.agent.data.sync.OfflineLimitEnforcer
+import com.gaboom.agent.data.network.NetworkMonitor
+
 @Singleton
 class HeartbeatManager @Inject constructor(
     private val dynamicRetrofitProvider: com.gaboom.agent.data.api.DynamicRetrofitProvider,
     private val locationSyncManager: com.gaboom.agent.data.sync.LocationSyncManager,
+    private val offlineLimitEnforcer: OfflineLimitEnforcer,
+    private val networkMonitor: NetworkMonitor,
     @ApplicationContext private val context: Context
 ) {
     private var heartbeatJob: Job? = null
+    private var connectivityJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var lastLocation: Location? = null
     private var isLocationListenerRegistered = false
@@ -68,6 +74,17 @@ class HeartbeatManager @Inject constructor(
         
         registerLocationListener()
         
+        var wasOffline = !networkMonitor.isOnline.value
+        connectivityJob = scope.launch {
+            networkMonitor.isOnline.collect { isOnline ->
+                if (isOnline && wasOffline) {
+                    android.util.Log.d("HeartbeatManager", "Network restored, triggering immediate heartbeat")
+                    triggerImmediateHeartbeat()
+                }
+                wasOffline = !isOnline
+            }
+        }
+        
         heartbeatJob = scope.launch {
             while (isActive) {
                 if (!isLocationListenerRegistered) {
@@ -78,7 +95,10 @@ class HeartbeatManager @Inject constructor(
                     if (loc != null) {
                         locationSyncManager.queueLocation(loc.latitude, loc.longitude)
                     } else {
-                        dynamicRetrofitProvider.getApiService().heartbeat(HeartbeatRequest(null, null))
+                        val response = dynamicRetrofitProvider.getApiService().heartbeat(HeartbeatRequest(null, null))
+                        if (response.isSuccessful) {
+                            offlineLimitEnforcer.recordServerContact()
+                        }
                     }
                 } catch (e: Exception) {
                     // Silently ignore heartbeat errors
@@ -88,9 +108,31 @@ class HeartbeatManager @Inject constructor(
         }
     }
 
+    fun triggerImmediateHeartbeat() {
+        scope.launch {
+            try {
+                val loc = lastLocation ?: getLastKnownLocation()
+                val response = if (loc != null) {
+                    val req = HeartbeatRequest(latitude = loc.latitude, longitude = loc.longitude)
+                    dynamicRetrofitProvider.getApiService().heartbeat(req)
+                } else {
+                    dynamicRetrofitProvider.getApiService().heartbeat(HeartbeatRequest(null, null))
+                }
+                if (response.isSuccessful) {
+                    android.util.Log.d("HeartbeatManager", "Immediate heartbeat successful, recording contact")
+                    offlineLimitEnforcer.recordServerContact()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("HeartbeatManager", "Immediate heartbeat error: ${e.message}")
+            }
+        }
+    }
+
     fun stop() {
         heartbeatJob?.cancel()
         heartbeatJob = null
+        connectivityJob?.cancel()
+        connectivityJob = null
         unregisterLocationListener()
     }
 

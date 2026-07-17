@@ -148,6 +148,7 @@ class VenteViewModel @Inject constructor(
         try {
             val response = drawRepository.getTiragesActifs()
             if (response.isSuccessful) {
+                offlineLimitEnforcer.recordServerContact()
                 val allTirages = response.body()?.tirages ?: emptyList()
                 agentConfigDataStore.saveCachedTirages(allTirages)
                 _uiState.value = _uiState.value.copy(
@@ -922,7 +923,7 @@ class VenteViewModel @Inject constructor(
                         }.joinToString(", ")
                         
                         val shareInfo = TicketShareInfo(
-                            ticketNo = if (tickets.size > 1) "${tickets.size} tickets" else firstTicket.ticketNo,
+                            ticketNo = if (tickets.size > 1) "Multi-tirage" else firstTicket.ticketNo,
                             tirageNom = tirageNames,
                             date = now.toLocalDate().toString(),
                             time = now.toLocalTime().toString().take(5),
@@ -939,7 +940,7 @@ class VenteViewModel @Inject constructor(
                             ticketFooterText = _uiState.value.ticketFooterText,
                             mariageGratuitActif = _uiState.value.mariageGratuitActif,
                             mariageGratuitMontant = _uiState.value.mariageGratuitMontant,
-                            isOffline = true // Always local-first
+                            isOffline = false // Remove offline watermark
                         )
                         
                         _uiState.value = _uiState.value.copy(
@@ -1007,11 +1008,60 @@ class VenteViewModel @Inject constructor(
             tirages = listOf(ticket.tirageNom),
             lines = lines,
             totalMise = ticket.totalMise,
-            isOffline = true,
+            isOffline = false,
             ticketFooterText = _uiState.value.ticketFooterText,
             mariageGratuitActif = _uiState.value.mariageGratuitActif,
             mariageGratuitMontant = _uiState.value.mariageGratuitMontant,
             qrCodeUrl = qrUrl
+        )
+    }
+
+    private fun buildCombinedPrintData(tickets: List<CreatedTicketInfo>, apiLines: List<TicketLine>): PrintData {
+        val firstTicket = tickets.first()
+        val lines = apiLines.map { line ->
+            val isLoto = line.jeu.lowercase() in listOf("loto4", "loto5")
+            val jeuDisplay = if (isLoto && line.option >= 1) {
+                "${line.jeu.uppercase()}-OPT${line.option}"
+            } else {
+                line.jeu.uppercase()
+            }
+            String.format("%-8s %-9s %6.0f", jeuDisplay, line.valeur, line.mise)
+        }
+        val now = java.util.Date(com.gaboom.agent.data.clock.SecuredClock.now())
+        val dateFormat = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
+        val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+
+        val deviceCreds = kotlinx.coroutines.runBlocking { agentConfigDataStore.getDeviceCredentials() }
+        val deviceId = deviceCreds?.deviceId ?: "unknown_device"
+        val agentId = _uiState.value.agentName.ifEmpty { "unknown_agent" }
+        val ts = now.time
+        val groupId = firstTicket.groupId ?: ""
+        
+        val qrUrl = "https://www.gaboombos.com/ticket/scan/?group_id=$groupId&station=$agentId&term=$deviceId&ts=$ts"
+
+        val tirageNames = tickets.map { t ->
+            "${t.tirageNom} (${t.ticketNo})"
+        }
+
+        return PrintData(
+            borletteName = _uiState.value.borletteName.ifEmpty { "Gaboom" },
+            borletteSlogan = _uiState.value.borletteSlogan,
+            borletteTel = _uiState.value.borletteTel,
+            borletteAdresse = _uiState.value.borletteAdresse,
+            borletteLogoUrl = _uiState.value.borletteLogoUrl,
+            agentName = _uiState.value.agentName.ifEmpty { "Agent" },
+            ticketNumber = "Multi-tirage",
+            date = dateFormat.format(now),
+            time = timeFormat.format(now),
+            tirages = tirageNames,
+            lines = lines,
+            totalMise = tickets.sumOf { it.totalMise },
+            isOffline = false,
+            ticketFooterText = _uiState.value.ticketFooterText,
+            mariageGratuitActif = _uiState.value.mariageGratuitActif,
+            mariageGratuitMontant = _uiState.value.mariageGratuitMontant,
+            qrCodeUrl = qrUrl,
+            groupId = groupId
         )
     }
 
@@ -1104,6 +1154,7 @@ class VenteViewModel @Inject constructor(
         try {
             val response = drawRepository.getTiragesActifs()
             if (response.isSuccessful) {
+                offlineLimitEnforcer.recordServerContact()
                 val allTirages = response.body()?.tirages ?: emptyList()
                 agentConfigDataStore.saveCachedTirages(allTirages)
                 val openTirages = allTirages.filter { it.etat == "OUVERT" }
@@ -1154,6 +1205,7 @@ class VenteViewModel @Inject constructor(
             try {
                 val response = drawRepository.getTiragesActifs()
                 if (response.isSuccessful) {
+                    offlineLimitEnforcer.recordServerContact()
                     val allTirages = response.body()?.tirages ?: emptyList()
                     agentConfigDataStore.saveCachedTirages(allTirages)
                     val openTirages = allTirages.filter { it.etat == "OUVERT" }
@@ -1336,7 +1388,8 @@ class VenteViewModel @Inject constructor(
                 printed = false,
                 isOffline = true,
                 signature = t.signature,
-                hash = t.hash
+                hash = t.hash,
+                groupId = body.groupId ?: t.groupId
             )
         }
 
@@ -1351,62 +1404,44 @@ class VenteViewModel @Inject constructor(
             currentPrintIndex = 0,
             ticketCreated = false, // Keep false while printing!
             error = errorMsg,
-            creationProgress = "Impression 1/${createdTickets.size}..."
+            creationProgress = "Impression du ticket..."
         )
 
-        // Start chained printing
-        printCurrentTicketMulti()
+        // Start combined printing
+        printCombinedTicketMulti()
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // CHAINED PRINTING FOR MULTI-TIRAGE
+    // COMBINED PRINTING FOR MULTI-TIRAGE
     // ═══════════════════════════════════════════════════════════════════════
 
-    private fun printCurrentTicketMulti() {
+    private fun printCombinedTicketMulti() {
         viewModelScope.launch {
             val tickets = _uiState.value.createdTickets
-            val index = _uiState.value.currentPrintIndex
-            if (index >= tickets.size) {
-                // All printed
+            if (tickets.isEmpty()) {
                 return@launch
             }
 
-            val ticket = tickets[index]
             _uiState.value = _uiState.value.copy(
                 printError = null,
-                creationProgress = "Impression ${index + 1}/${tickets.size}..."
+                creationProgress = "Impression du ticket..."
             )
 
             try {
-                val printData = if (ticket.isOffline) {
-                    // Build print data locally for offline ticket
-                    // Need to find the lines for this ticket.
-                    // For now, assume global lines are used if it's a multi-tirage batch
-                    val apiLines = _uiState.value.lines.flatMap { it.toApiLines() }
-                    buildOfflinePrintData(ticket, apiLines)
-                } else {
-                    val printResponse = ticketRepository.getTicketPrint(ticket.ticketId)
-                    if (printResponse.isSuccessful) {
-                        printResponse.body()?.printData
-                    } else {
-                        null
-                    }
-                }
+                val apiLines = _uiState.value.lines.flatMap { it.toApiLines() }
+                val printData = buildCombinedPrintData(tickets, apiLines)
 
-                if (printData != null) {
-                    val result = printer.printTicket(printData)
-                    if (result.isSuccess) {
-                        markTicketPrinted(index)
-                        printNextTicketMulti() // Advance to next ticket
-                    } else {
-                        _uiState.value = _uiState.value.copy(
-                            printError = "Impression échouée: ${result.exceptionOrNull()?.message ?: "Erreur"}",
-                            creationProgress = null
-                        )
-                    }
+                val result = printer.printTicket(printData)
+                if (result.isSuccess) {
+                    _uiState.value = _uiState.value.copy(
+                        createdTickets = tickets.map { it.copy(printed = true) },
+                        creationProgress = null,
+                        printError = null,
+                        ticketCreated = true
+                    )
                 } else {
                     _uiState.value = _uiState.value.copy(
-                        printError = "Erreur récupération données impression",
+                        printError = "Impression échouée: ${result.exceptionOrNull()?.message ?: "Erreur"}",
                         creationProgress = null
                     )
                 }
@@ -1419,35 +1454,16 @@ class VenteViewModel @Inject constructor(
         }
     }
 
-    private fun markTicketPrinted(index: Int) {
-        val tickets = _uiState.value.createdTickets.toMutableList()
-        if (index in tickets.indices) {
-            tickets[index] = tickets[index].copy(printed = true)
-            _uiState.value = _uiState.value.copy(createdTickets = tickets)
-        }
-    }
-
-    fun printNextTicketMulti() {
-        val nextIndex = _uiState.value.currentPrintIndex + 1
-        if (nextIndex >= _uiState.value.createdTickets.size) {
-            // All done
-            _uiState.value = _uiState.value.copy(
-                creationProgress = null,
-                printError = null,
-                ticketCreated = true // All tickets successfully printed or skipped, safe to navigate back!
-            )
-        } else {
-            _uiState.value = _uiState.value.copy(currentPrintIndex = nextIndex)
-            printCurrentTicketMulti()
-        }
-    }
-
     fun skipPrintMulti() {
-        printNextTicketMulti()
+        _uiState.value = _uiState.value.copy(
+            creationProgress = null,
+            printError = null,
+            ticketCreated = true
+        )
     }
 
     fun retryPrintMulti() {
-        printCurrentTicketMulti()
+        printCombinedTicketMulti()
     }
 
     fun toggleFreeMariage(checked: Boolean) {

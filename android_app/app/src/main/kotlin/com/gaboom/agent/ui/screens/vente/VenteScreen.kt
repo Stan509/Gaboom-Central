@@ -1417,7 +1417,11 @@ fun VenteScreen(
             borletteTel = ticketInfo.borletteTel,
             borletteAdresse = ticketInfo.borletteAdresse,
             agentName = ticketInfo.agentName,
-            qrCode = ticketInfo.groupId,
+            qrCode = if (!ticketInfo.groupId.isNullOrBlank()) {
+                "https://www.gaboombos.com/ticket/scan/?group_id=${ticketInfo.groupId}"
+            } else {
+                "https://www.gaboombos.com/ticket/scan/?uuid=${ticketInfo.ticketId}"
+            },
             logoBitmap = logoBitmap,
             ticketFooterText = ticketInfo.ticketFooterText,
             mariageGratuitActif = ticketInfo.mariageGratuitActif,
@@ -1454,7 +1458,12 @@ fun VenteScreen(
                             .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        val hasBothLogoAndQr = !ticketInfo.borletteLogoUrl.isNullOrBlank() && !ticketInfo.groupId.isNullOrBlank()
+                        val qrContent = if (!ticketInfo.groupId.isNullOrBlank()) {
+                            "https://www.gaboombos.com/ticket/scan/?group_id=${ticketInfo.groupId}"
+                        } else {
+                            "https://www.gaboombos.com/ticket/scan/?uuid=${ticketInfo.ticketId}"
+                        }
+                        val hasBothLogoAndQr = !ticketInfo.borletteLogoUrl.isNullOrBlank() && qrContent.isNotEmpty()
                         
                         // Logo (only if NOT side-by-side)
                         if (!ticketInfo.borletteLogoUrl.isNullOrBlank() && !hasBothLogoAndQr) {
@@ -1493,20 +1502,20 @@ fun VenteScreen(
                                 )
                                 Spacer(modifier = Modifier.width(16.dp))
                                 QrCodeImage(
-                                    content = ticketInfo.groupId!!,
+                                    content = qrContent,
                                     size = 48.dp
                                 )
                             }
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("QR Code Groupe", fontSize = 9.sp, color = Color.Gray)
-                        } else if (!ticketInfo.groupId.isNullOrBlank()) {
+                            Text("Code QR", fontSize = 9.sp, color = Color.Gray)
+                        } else if (qrContent.isNotEmpty()) {
                             Spacer(modifier = Modifier.height(6.dp))
                             QrCodeImage(
-                                content = ticketInfo.groupId!!,
+                                content = qrContent,
                                 size = 60.dp
                             )
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text("QR Code Groupe", fontSize = 9.sp, color = Color.Gray)
+                            Text("Code QR", fontSize = 9.sp, color = Color.Gray)
                         }
                         
                         Divider(modifier = Modifier.padding(vertical = 6.dp), color = Color.LightGray)
@@ -1517,24 +1526,7 @@ fun VenteScreen(
                             Text("Agent: ${ticketInfo.agentName}", fontSize = 11.sp, modifier = Modifier.fillMaxWidth())
                         }
                         Text("Tirage(s): ${ticketInfo.tirageNom}", fontSize = 11.sp, modifier = Modifier.fillMaxWidth())
-                        if (ticketInfo.isOffline) {
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                "*** HORS-LIGNE ***",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.Red,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                "A valider en ligne",
-                                fontSize = 11.sp,
-                                color = Color.Red,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
-                            )
-                        }
+                        // Offline watermarks removed as per user requirement
                         
                         Divider(modifier = Modifier.padding(vertical = 6.dp), color = Color.LightGray)
                         

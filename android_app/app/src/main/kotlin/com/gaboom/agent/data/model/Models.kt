@@ -237,7 +237,8 @@ data class CreatedTicketInfo(
     val printed: Boolean = false,
     val isOffline: Boolean = false,
     val signature: String? = null,
-    val hash: String? = null
+    val hash: String? = null,
+    val groupId: String? = null
 )
 
 data class MultiTicketLineInfo(

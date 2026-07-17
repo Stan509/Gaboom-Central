@@ -70,7 +70,8 @@ class SyncManager @Inject constructor(
     private val syncPolicy: com.gaboom.agent.policy.SyncPolicy,
     private val gson: Gson,
     private val agentConfigDataStore: AgentConfigDataStore,
-    private val localTicketCacheDao: com.gaboom.agent.data.local.LocalTicketCacheDao
+    private val localTicketCacheDao: com.gaboom.agent.data.local.LocalTicketCacheDao,
+    private val offlineLimitEnforcer: OfflineLimitEnforcer
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
@@ -297,6 +298,7 @@ class SyncManager @Inject constructor(
             
             return if (response.isSuccessful && response.body()?.success == true) {
                 val body = response.body()!!
+                offlineLimitEnforcer.recordServerContact()
                 handleSyncSuccess(batch, body, deviceCreds)
                 BatchSyncResult.Success(batch.batchId)
             } else {

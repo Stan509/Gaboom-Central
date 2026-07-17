@@ -83,11 +83,6 @@ object TicketShareUtil {
         if (!data.agentName.isNullOrBlank()) {
             sb.appendLine("Agent: ${data.agentName}")
         }
-        if (data.isOffline) {
-            sb.appendLine()
-            sb.appendLine("*** HORS-LIGNE ***")
-            sb.appendLine("A valider en ligne")
-        }
         sb.appendLine()
         val generalLines = data.lines.filter { it.jeu.lowercase() != "mariage" }
         val mariageLines = data.lines.filter { it.jeu.lowercase() == "mariage" && !it.gratuit }
@@ -252,7 +247,6 @@ object TicketShareUtil {
         
         calcHeight += 25 // separator
         calcHeight += 25 * 4 // ticket info (4 lines)
-        if (data.isOffline) calcHeight += 45 // offline watermark
         calcHeight += 25 // separator
         
         val generalLines = data.lines.filter { it.jeu.lowercase() != "mariage" }
@@ -389,26 +383,6 @@ object TicketShareUtil {
         }
         canvas.drawText("Tirage(s): ${data.tirageNom}", padding.toFloat(), y + 16, paintNormal)
         y += 22
-        
-        if (data.isOffline) {
-            val paintOfflineTitle = Paint().apply {
-                color = Color.RED
-                textSize = 20f
-                typeface = Typeface.DEFAULT_BOLD
-                isAntiAlias = true
-                textAlign = Paint.Align.CENTER
-            }
-            val paintOfflineSub = Paint().apply {
-                color = Color.RED
-                textSize = 14f
-                isAntiAlias = true
-                textAlign = Paint.Align.CENTER
-            }
-            canvas.drawText("*** HORS-LIGNE ***", centerX, y + 18, paintOfflineTitle)
-            y += 22
-            canvas.drawText("A valider en ligne", centerX, y + 14, paintOfflineSub)
-            y += 18
-        }
         
         // Separator
         canvas.drawText("--------------------------------", centerX, y + 12, paintSeparator)

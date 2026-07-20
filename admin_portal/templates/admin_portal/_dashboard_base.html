@@ -159,6 +159,25 @@
         </aside>
 
         <main class="portal-main pb-24 lg:pb-16" role="main">
+          {% if messages %}
+            <div class="px-6 pt-4 max-w-6xl mx-auto space-y-3" id="flashMessagesContainer">
+              {% for message in messages %}
+                <div class="p-4 rounded-2xl border flex items-center justify-between shadow-xl backdrop-blur-xl transition-all duration-300 {% if message.tags == 'error' or message.tags == 'danger' %}bg-rose-500/20 border-rose-500/40 text-rose-200{% elif message.tags == 'success' %}bg-emerald-500/20 border-emerald-500/40 text-emerald-200{% elif message.tags == 'warning' %}bg-amber-500/20 border-amber-500/40 text-amber-200{% else %}bg-sky-500/20 border-sky-500/40 text-sky-200{% endif %}" role="alert">
+                  <div class="flex items-center gap-3">
+                    {% if message.tags == 'error' or message.tags == 'danger' %}
+                      <span class="text-lg">⚠️</span>
+                    {% elif message.tags == 'success' %}
+                      <span class="text-lg">✨</span>
+                    {% else %}
+                      <span class="text-lg">ℹ️</span>
+                    {% endif %}
+                    <span class="font-semibold text-sm">{{ message }}</span>
+                  </div>
+                  <button type="button" onclick="this.parentElement.remove()" class="text-white/60 hover:text-white text-xl font-bold px-2 cursor-pointer">&times;</button>
+                </div>
+              {% endfor %}
+            </div>
+          {% endif %}
           {% block content %}{% endblock %}
         </main>
       </div>

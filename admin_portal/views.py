@@ -869,7 +869,13 @@ def agent_create(request):
                 statut=AgentStatus.ACTIF,
             )
 
-            return redirect("admin_portal:agent_detail", agent_id=agent.id)
+            messages.success(
+                request,
+                f"L'agent '{agent.nom}' a été créé avec succès sur le serveur ! (Identifiant : {username})"
+            )
+            return redirect("admin_portal:agents")
+        else:
+            messages.error(request, "Erreur lors de la création de l'agent. Veuillez vérifier les informations saisies.")
     else:
         form = AgentCreateForm()
 
@@ -919,7 +925,10 @@ def agent_edit(request, agent_id: int):
         form = AgentEditForm(request.POST, instance=agent)
         if form.is_valid():
             form.save()
-            return redirect("admin_portal:agent_detail", agent_id=agent.id)
+            messages.success(request, f"L'agent '{agent.nom}' a été modifié avec succès !")
+            return redirect("admin_portal:agents")
+        else:
+            messages.error(request, "Erreur lors de la modification de l'agent. Veuillez vérifier les informations saisies.")
     else:
         form = AgentEditForm(instance=agent)
 

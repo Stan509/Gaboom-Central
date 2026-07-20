@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     'admin_portal',
     'tickets',
     'agent_portal',
+    'core',
 ]
 
 MIDDLEWARE = [

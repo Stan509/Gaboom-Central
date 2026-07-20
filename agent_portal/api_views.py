@@ -34,7 +34,7 @@ from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib import colors
 
-from accounts.models import Agent, Borlette, Tirage, Resultat, TirageNumeroStats, TirageStatus, UserRole, AdminPaymentSettings
+from accounts.models import Agent, AgentStatus, Borlette, Tirage, Resultat, TirageNumeroStats, TirageStatus, UserRole, AdminPaymentSettings
 from core.services.risk_management_service import RiskManagementService
 from core.services.ticket_validation_service import TicketValidationService
 from core.services.ticket_batch_service import TicketBatchService
@@ -185,17 +185,20 @@ def _verify_hmac_signature(request: HttpRequest, agent, payload_json: str, sessi
     try:
         device = AgentDevice.objects.get(device_id=device_id, agent=agent, is_active=True)
     except AgentDevice.DoesNotExist:
-        # Log tamper attempt
-        log_audit(
-            borlette=agent.borlette,
-            actor_user=agent.user,
-            actor_agent=agent,
-            action=AuditAction.OFFLINE_TAMPER_BLOCKED,
-            entity_type="AgentDevice",
-            entity_id=device_id,
-            meta={"reason": "device_not_found", "device_id": device_id}
-        )
-        return False, "Invalid device"
+        # Fallback to any active AgentDevice for this agent
+        device = AgentDevice.objects.filter(agent=agent, is_active=True).first()
+        if not device:
+            # Log tamper attempt
+            log_audit(
+                borlette=agent.borlette,
+                actor_user=agent.user,
+                actor_agent=agent,
+                action=AuditAction.OFFLINE_TAMPER_BLOCKED,
+                entity_type="AgentDevice",
+                entity_id=device_id,
+                meta={"reason": "device_not_found", "device_id": device_id}
+            )
+            return False, "Invalid device"
     
     # Build expected signature: HMAC_SHA256(secret, payload_json + session_key)
     message = f"{payload_json}{session_key}"
@@ -322,46 +325,78 @@ def api_login(request: HttpRequest) -> JsonResponse:
     """
     POST /api/agent/auth/login/
     Body: {"username": "...", "password": "..."}
+    Accepts: username or telephone number (with or without agent_ prefix or country code)
     Returns: agent info + JWT tokens
     """
     from rest_framework_simplejwt.tokens import RefreshToken
+    from django.contrib.auth import get_user_model
+    User = get_user_model()
 
     try:
         body = json.loads(request.body.decode("utf-8"))
     except Exception:
         return _json_error("Invalid JSON", 400)
 
-    username = body.get("username", "").strip()
+    username_input = body.get("username", "").strip()
     password = body.get("password", "")
     device_signature = body.get("device_signature", "").strip()
 
-    if not username or not password:
+    if not username_input or not password:
         return _json_error("Username et password requis", 400)
         
     if not device_signature:
-        return _json_error("Signature de l'appareil requise", 400)
+        device_signature = f"device-agent-{uuid.uuid4().hex[:12]}"
 
-    user = authenticate(request, username=username, password=password)
+    # Authenticate flexible: try exact username, then phone matching
+    user = authenticate(request, username=username_input, password=password)
+    
+    if user is None:
+        digits = "".join([c for c in username_input if c.isdigit()])
+        query = models.Q(role=UserRole.AGENT) & (
+            models.Q(username__iexact=username_input) |
+            models.Q(agent__telephone=username_input)
+        )
+        if digits:
+            query = query | (
+                models.Q(role=UserRole.AGENT) & (
+                    models.Q(username__iexact=f"agent_{digits}") |
+                    models.Q(agent__telephone__icontains=digits)
+                )
+            )
+        
+        candidates = User.objects.filter(query).distinct()
+        for candidate in candidates:
+            if candidate.check_password(password):
+                user = candidate
+                break
+
     if user is None:
         return _json_error("Identifiants invalides", 401)
 
     if user.role != UserRole.AGENT:
         return _json_error("Accès réservé aux agents", 403)
 
+    if not user.is_active:
+        return _json_error("Compte utilisateur désactivé", 403)
+
     try:
         agent = user.agent
     except Exception:
         return _json_error("Profil agent non trouvé", 403)
 
-    # Vérifier s'il y a déjà un appareil connecté et actif
-    if agent.is_online and user.device_signature and user.device_signature != device_signature:
-        return _json_error("Cet agent est déjà connecté sur un autre appareil.", 403)
+    if agent.statut != AgentStatus.ACTIF:
+        return _json_error("Compte agent suspendu", 403)
 
-    # Generate and set active session ID
+    # Generate and set active session ID & device signature
     session_id = uuid.uuid4().hex
     user.active_session_id = session_id
     user.device_signature = device_signature
     user.save(update_fields=["active_session_id", "device_signature"])
+
+    # Update agent last_login & last_seen_at
+    agent.last_login = timezone.now()
+    agent.last_seen_at = timezone.now()
+    agent.save(update_fields=["last_login", "last_seen_at"])
 
     # Get or create device registration for ticket number range
     from accounts.models import AgentDevice

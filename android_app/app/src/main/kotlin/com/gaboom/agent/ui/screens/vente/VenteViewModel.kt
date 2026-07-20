@@ -919,11 +919,17 @@ class VenteViewModel @Inject constructor(
                         // Use first ticket info for sharing (group_id is shared)
                         val firstTicket = tickets.first()
                         val tirageNames = tickets.mapNotNull { t -> 
-                            _uiState.value.availableTirages.find { it.id == t.tirageId }?.nom 
+                            val tirage = _uiState.value.availableTirages.find { it.id == t.tirageId }
+                            val heure = tirage?.heureTirage ?: ""
+                            if (tirage != null && heure.isNotBlank()) {
+                                "${tirage.nom} ($heure)"
+                            } else {
+                                t.tirageNom
+                            }
                         }.joinToString(", ")
                         
                         val shareInfo = TicketShareInfo(
-                            ticketNo = if (tickets.size > 1) "Multi-tirage" else firstTicket.ticketNo,
+                            ticketNo = firstTicket.ticketNo,
                             tirageNom = tirageNames,
                             date = now.toLocalDate().toString(),
                             time = now.toLocalTime().toString().take(5),
@@ -1040,7 +1046,10 @@ class VenteViewModel @Inject constructor(
         val qrUrl = "https://www.gaboombos.com/ticket/scan/?group_id=$groupId&station=$agentId&term=$deviceId&ts=$ts"
 
         val tirageNames = tickets.map { t ->
-            "${t.tirageNom} (${t.ticketNo})"
+            val tirage = _uiState.value.availableTirages.find { it.id == t.tirageId }
+            val heure = tirage?.heureTirage ?: ""
+            val nameWithHeure = if (heure.isNotBlank()) "${t.tirageNom} ($heure)" else t.tirageNom
+            "$nameWithHeure - ${t.ticketNo}"
         }
 
         return PrintData(
@@ -1050,7 +1059,7 @@ class VenteViewModel @Inject constructor(
             borletteAdresse = _uiState.value.borletteAdresse,
             borletteLogoUrl = _uiState.value.borletteLogoUrl,
             agentName = _uiState.value.agentName.ifEmpty { "Agent" },
-            ticketNumber = "Multi-tirage",
+            ticketNumber = firstTicket.ticketNo,
             date = dateFormat.format(now),
             time = timeFormat.format(now),
             tirages = tirageNames,

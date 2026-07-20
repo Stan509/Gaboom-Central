@@ -377,7 +377,8 @@ class TicketBatchService:
                         )
                         continue
 
-                    draw.ensure_current_session()
+                    heure_str = draw.heure_tirage.strftime("%H:%M") if draw.heure_tirage else ""
+                    draw_name_display = f"{draw.nom} ({heure_str})" if heure_str else draw.nom
 
                     override_data = overrides.get(str(draw.id), {}) if overrides else {}
                     ticket_uuid = override_data.get("ticket_uuid")
@@ -386,9 +387,11 @@ class TicketBatchService:
                     if ticket_uuid:
                         existing_ticket = Ticket.objects.filter(id=ticket_uuid).first()
                         if existing_ticket:
+                            ex_heure = existing_ticket.tirage.heure_tirage.strftime("%H:%M") if (existing_ticket.tirage and existing_ticket.tirage.heure_tirage) else ""
+                            ex_draw_name = f"{existing_ticket.tirage.nom} ({ex_heure})" if (existing_ticket.tirage and ex_heure) else draw_name_display
                             created_tickets.append({
                                 "tirage_id": draw.id,
-                                "tirage_nom": draw.nom,
+                                "tirage_nom": ex_draw_name,
                                 "ticket_uuid": str(existing_ticket.id),
                                 "ticket_no": existing_ticket.numero_ticket,
                                 "group_id": str(group_id),
@@ -399,22 +402,29 @@ class TicketBatchService:
                                     "mise": float(l.mise),
                                     "potentiel_gain": float(l.potentiel_gain)
                                 } for l in existing_ticket.lignes.all()],
+                                "status": existing_ticket.statut,
                             })
                             continue
 
                     if ticket_number:
-                        existing_number_ticket = Ticket.objects.filter(numero_ticket=ticket_number).first()
-                        if existing_number_ticket and str(existing_number_ticket.id) != ticket_uuid:
-                            from core.services.security_audit import SecurityAuditService, SecuritySeverity
-                            SecurityAuditService.log_security_event(
-                                action="DUPLICATE_TICKET_NUMBER",
-                                severity=SecuritySeverity.CRITICAL,
-                                details=f"Attempted to create duplicate ticket number {ticket_number} with different UUID (original UUID: {existing_number_ticket.id}, new UUID: {ticket_uuid})"
-                            )
-                            failed_tirages.append({
+                        existing_number_ticket = Ticket.objects.filter(numero_ticket=ticket_number, borlette=borlette).first()
+                        if existing_number_ticket:
+                            ex_heure = existing_number_ticket.tirage.heure_tirage.strftime("%H:%M") if (existing_number_ticket.tirage and existing_number_ticket.tirage.heure_tirage) else ""
+                            ex_draw_name = f"{existing_number_ticket.tirage.nom} ({ex_heure})" if (existing_number_ticket.tirage and ex_heure) else draw_name_display
+                            created_tickets.append({
                                 "tirage_id": draw.id,
-                                "tirage_nom": draw.nom,
-                                "error": f"Duplicate ticket number {ticket_number} detected",
+                                "tirage_nom": ex_draw_name,
+                                "ticket_uuid": str(existing_number_ticket.id),
+                                "ticket_no": existing_number_ticket.numero_ticket,
+                                "group_id": str(group_id),
+                                "total_mise": float(existing_number_ticket.total_mise),
+                                "lines": [{
+                                    "jeu": l.jeu.upper(),
+                                    "valeur": l.valeur,
+                                    "mise": float(l.mise),
+                                    "potentiel_gain": float(l.potentiel_gain)
+                                } for l in existing_number_ticket.lignes.all()],
+                                "status": existing_number_ticket.statut,
                             })
                             continue
 
@@ -558,7 +568,7 @@ class TicketBatchService:
 
                     created_tickets.append({
                         "tirage_id": draw.id,
-                        "tirage_nom": draw.nom,
+                        "tirage_nom": draw_name_display,
                         "ticket_uuid": str(ticket.id),
                         "ticket_no": ticket.numero_ticket,
                         "group_id": str(group_id),

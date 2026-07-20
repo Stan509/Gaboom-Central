@@ -57,11 +57,11 @@ def build_ticket_preview(*, admin, agent, ticket_lines: list[dict], draw_ids: li
 
     draw_names: list[str] = []
     if draw_ids:
-        draw_names = list(
-            Tirage.objects.filter(id__in=draw_ids, borlette=borlette)
-            .order_by("ordre_affichage", "heure_tirage")
-            .values_list("nom", flat=True)
-        )
+        draws = Tirage.objects.filter(id__in=draw_ids, borlette=borlette).order_by("ordre_affichage", "heure_tirage")
+        draw_names = [
+            f"{t.nom} ({t.heure_tirage.strftime('%H:%M')})" if t.heure_tirage else t.nom
+            for t in draws
+        ]
 
     normalized_lines = _normalize_lines(ticket_lines)
     

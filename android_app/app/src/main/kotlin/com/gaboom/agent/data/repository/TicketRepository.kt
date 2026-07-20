@@ -152,6 +152,16 @@ class TicketRepository @Inject constructor(
                 )
             } else null
 
+            // Find draw name and result time for display
+            val tirageInfo = cachedTirages.find { it.id == tirageId }
+            val tirageNom = if (tirageInfo != null && tirageInfo.heureTirage.isNotBlank()) {
+                "${tirageInfo.nom} (${tirageInfo.heureTirage})"
+            } else tirageInfo?.nom ?: "Tirage"
+
+            val batchLabel = cachedTirages.filter { it.id in tirageIds }.map { t ->
+                if (t.heureTirage.isNotBlank()) "${t.nom} (${t.heureTirage})" else t.nom
+            }.joinToString(", ").ifEmpty { tirageNom }
+
             // Persist to pending queue (for background upload)
             val pendingTicket = PendingTicketEntity(
                 id = localId,
@@ -164,6 +174,7 @@ class TicketRepository @Inject constructor(
                 syncStatus = SyncStatus.LOCAL_PENDING,
                 hmacSignature = hmacSignature,
                 batchId = groupId,
+                batchLabel = batchLabel,
                 localTicketNo = localTicketNo
             )
             pendingTicketDao.insert(pendingTicket)
@@ -174,7 +185,7 @@ class TicketRepository @Inject constructor(
                 numero = localTicketNo,
                 groupId = groupId,
                 tirageId = tirageId,
-                tirageNom = "Tirage",
+                tirageNom = tirageNom,
                 tirageOpen = true,
                 status = "pending",
                 numBets = entries.size,
@@ -206,7 +217,7 @@ class TicketRepository @Inject constructor(
 
             MultiTicketInfo(
                 tirageId = tirageId,
-                tirageNom = "Tirage",
+                tirageNom = tirageNom,
                 ticketId = localId,
                 ticketNo = localTicketNo,
                 groupId = groupId,

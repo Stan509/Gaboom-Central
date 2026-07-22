@@ -47,6 +47,7 @@ urlpatterns = [
     path("team/<int:staff_id>/edit/", views.team_edit, name="team_edit"),
     path("team/<int:staff_id>/suspend/", views.team_suspend, name="team_suspend"),
     path("team/<int:staff_id>/delete/", views.team_delete, name="team_delete"),
+    path("tickets-list/", views.tickets_list, name="tickets_list"),
     path("tickets/", include(("tickets.urls", "tickets"), namespace="tickets")),
     # Dépenses
     path("depenses/", views.depenses_list, name="depenses_list"),
@@ -79,6 +80,7 @@ urlpatterns = [
     path("api/tickets/search/", results_api.api_ticket_search, name="api_ticket_search"),
     path("api/tickets/<str:ticket_id>/void/", results_api.api_ticket_void, name="api_ticket_void"),
     path("api/tickets/<str:ticket_id>/pay/", results_api.api_ticket_pay_admin, name="api_ticket_pay"),
+    path("api/tickets/<str:ticket_id>/pdf/", results_api.api_ticket_pdf_admin, name="api_ticket_pdf_admin"),
     # API Mariage Risk (Phase J)
     path("api/tirages/<int:tirage_id>/mariage-blocks/", mariage_risk_api.api_mariage_blocks_list, name="api_mariage_blocks_list"),
     path("api/tirages/<int:tirage_id>/mariage-blocks/add/", mariage_risk_api.api_mariage_block_add, name="api_mariage_block_add"),

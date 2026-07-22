@@ -7,7 +7,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth.decorators import login_required
 from django.db import models, transaction
-from django.http import HttpRequest, JsonResponse
+from django.http import HttpRequest, JsonResponse, HttpResponse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods, require_POST
 
@@ -250,6 +250,12 @@ def api_resultat_validate(request: HttpRequest, resultat_id: int) -> JsonRespons
     r.rejected_at = None
     r.save(update_fields=["statut", "validated_by", "validated_at", "rejected_by", "rejected_at"])
 
+    # Lancer le calcul des gains au moment de la validation
+    calc_result = ResultCalculationService.calculate_gains(
+        tirage=r.tirage,
+        resultat=r,
+    )
+
     log_audit(
         action=AuditAction.RESULTS_VALIDATE,
         entity_type="Resultat",
@@ -433,14 +439,13 @@ def api_ticket_search(request: HttpRequest) -> JsonResponse:
     if not ticket:
         return JsonResponse({"error": "Ticket non trouvé"}, status=404)
     
-    # Calculer si suppression possible (< 5 min, pas payé, et tirage ouvert)
+    # Calculer si suppression possible (< 2 min ou tirage ouvert, pas payé)
     now = timezone.now()
     is_draw_open = (ticket.tirage and ticket.tirage.etat_ouverture == "OUVERT") if ticket.tirage else True
     can_delete = (
-        (now - ticket.created_at) <= timedelta(minutes=5)
+        ((now - ticket.created_at) <= timedelta(minutes=2) or is_draw_open)
         and ticket.total_gain_paye == 0
         and ticket.statut != TicketStatus.ANNULE
-        and is_draw_open
     )
     
     # Lignes du ticket
@@ -511,18 +516,17 @@ def api_ticket_void(request: HttpRequest, ticket_id: str) -> JsonResponse:
     except Ticket.DoesNotExist:
         return JsonResponse({"error": "Ticket non trouvé"}, status=404)
     
-    # Vérification délai 5 minutes
+    # Annulation possible si age <= 2 min OU tirage ouvert
     now = timezone.now()
     age = now - ticket.created_at
+    is_draw_open = (ticket.tirage and ticket.tirage.etat_ouverture == "OUVERT") if ticket.tirage else True
     
-    if age > timedelta(minutes=5):
+    can_void = (age <= timedelta(minutes=2) or is_draw_open) and ticket.total_gain_paye == 0 and ticket.statut != TicketStatus.ANNULE
+    
+    if not can_void:
         return JsonResponse({
-            "error": f"Annulation impossible: ticket créé il y a {int(age.total_seconds() // 60)} minutes (max 5 min)"
+            "error": "Annulation impossible: le délai de 2 minutes est dépassé et le tirage est fermé."
         }, status=400)
-
-    # Aucun ticket ne peut être annulé si le tirage est fermé
-    if ticket.tirage and ticket.tirage.etat_ouverture != "OUVERT":
-        return JsonResponse({"error": "Annulation impossible: le tirage est fermé"}, status=400)
     
     # Utiliser le service qui gère l'écriture inverse caisse
     result = void_ticket_with_cashbox_reversal(ticket)
@@ -683,3 +687,111 @@ def api_tirages_results_status(request: HttpRequest) -> JsonResponse:
         "pending_count": len([s for s in all_statuses if not s.is_open and not s.has_results]),
         "overdue_count": len([s for s in all_statuses if s.is_overdue]),
     })
+
+
+@login_required
+def api_ticket_pdf_admin(request: HttpRequest, ticket_id: str) -> HttpResponse:
+    """
+    GET /portal/api/tickets/<uuid>/pdf/
+    Génère un PDF du ticket pour l'admin ou le superadmin.
+    """
+    from django.http import HttpResponse
+    
+    # Check role
+    if request.user.role not in (UserRole.ADMIN, UserRole.SUPER_ADMIN):
+        return HttpResponse("Accès refusé", status=403)
+
+    borlette = get_user_borlette(request.user) if request.user.role != UserRole.SUPER_ADMIN else None
+    
+    # Query ticket
+    q = Ticket.objects.select_related("tirage", "agent", "borlette").prefetch_related("lignes")
+    if borlette:
+        q = q.filter(borlette=borlette)
+    
+    ticket = q.filter(id=ticket_id).first()
+    if not ticket:
+        return HttpResponse("Ticket non trouvé", status=404)
+
+    borlette_obj = ticket.borlette
+    created = timezone.localtime(ticket.created_at)
+
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+
+    # Créer le PDF
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="ticket_{ticket.numero_ticket}.pdf"'
+
+    # Configuration du document (80mm de largeur comme un ticket thermique)
+    doc = SimpleDocTemplate(
+        response,
+        pagesize=(80 * mm, 200 * mm),
+        rightMargin=5 * mm,
+        leftMargin=5 * mm,
+        topMargin=5 * mm,
+        bottomMargin=5 * mm,
+    )
+
+    elements = []
+    styles = getSampleStyleSheet()
+
+    # En-tête
+    elements.append(Paragraph(f"<b>{borlette_obj.nom_borlette}</b>", styles['Center']))
+    elements.append(Paragraph(borlette_obj.slogan or "", styles['Center']))
+    elements.append(Spacer(1, 2 * mm))
+    elements.append(Paragraph(f"Tel: {borlette_obj.telephone or ''}", styles['Normal']))
+    elements.append(Paragraph(borlette_obj.ville or "", styles['Normal']))
+    elements.append(Spacer(1, 3 * mm))
+
+    # Ligne de séparation
+    elements.append(Paragraph("-" * 30, styles['Center']))
+    elements.append(Spacer(1, 2 * mm))
+
+    # Info ticket
+    elements.append(Paragraph(f"<b>Ticket:</b> {ticket.numero_ticket}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Date:</b> {created.strftime('%d/%m/%Y')}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Heure:</b> {created.strftime('%H:%M')}", styles['Normal']))
+    elements.append(Spacer(1, 2 * mm))
+    elements.append(Paragraph(f"<b>Agent:</b> {ticket.agent.nom}", styles['Normal']))
+    elements.append(Paragraph(f"<b>Tirage:</b> {ticket.tirage.nom if ticket.tirage else '—'}", styles['Normal']))
+    elements.append(Spacer(1, 3 * mm))
+
+    # Ligne de séparation
+    elements.append(Paragraph("-" * 30, styles['Center']))
+    elements.append(Spacer(1, 2 * mm))
+
+    # Lignes du ticket
+    table_data = [['JEU', 'VALEUR', 'MISE']]
+    for l in ticket.lignes.all():
+        jeu = l.jeu.upper()
+        valeur = l.valeur
+        mise = str(l.mise) if not l.gratuit else "GRATUIT"
+        table_data.append([jeu, valeur, mise])
+
+    table = Table(table_data, colWidths=[20 * mm, 20 * mm, 20 * mm])
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 4),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+    ]))
+    elements.append(table)
+    elements.append(Spacer(1, 3 * mm))
+
+    # Total
+    elements.append(Paragraph(f"<b>Total:</b> {ticket.total_mise} HTG", styles['Normal']))
+    elements.append(Spacer(1, 3 * mm))
+
+    # Signature
+    elements.append(Paragraph(f"<b>Statut:</b> {ticket.statut}", styles['Normal']))
+    if ticket.statut == TicketStatus.ANNULE:
+        elements.append(Paragraph("<font color='red'><b>TICKET ANNULE</b></font>", styles['Center']))
+
+    doc.build(elements)
+    return response

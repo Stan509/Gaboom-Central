@@ -1032,7 +1032,7 @@ class AgentDevice(models.Model):
         return f"{self.agent.nom} - {self.device_name or self.device_id[:8]}"
     
     def save(self, *args, **kwargs):
-        if not self.pk:
+        if self._state.adding:
             count = AgentDevice.objects.count()
             self.ticket_number_start = 5000000001 + (count * 1000000)
             self.ticket_number_end = self.ticket_number_start + 999998

@@ -1,0 +1,546 @@
+{% extends "admin_portal/_page_shell.html" %}
+{% load static %}
+
+{% block title %}Tickets | Central Borlette{% endblock %}
+{% block page_title %}Gestion des Tickets{% endblock %}
+
+{% block page_body %}
+<style>
+  .portal-page {
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .portal-page__header {
+    display: none !important;
+  }
+  .portal-page__body {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  .portal-main {
+    padding: 0 !important;
+  }
+
+  .tickets-page {
+    --bg0: #070a12;
+    --bg1: #081426;
+    --card-bg: rgba(10, 18, 35, 0.58);
+    --card-bg2: rgba(12, 28, 55, 0.34);
+    --border-color: rgba(255, 255, 255, 0.08);
+    --text-color: rgba(255, 255, 255, 0.92);
+    --muted-color: rgba(255, 255, 255, 0.62);
+    --accent-blue: #3aa0ff;
+    --accent-violet: #7c4dff;
+    --accent-danger: #ff4d6d;
+    --accent-success: #10b981;
+    --accent-warning: #f59e0b;
+    --shadow-card: 0 18px 45px rgba(0, 0, 0, 0.45);
+
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 28px 32px 48px;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    box-sizing: border-box;
+  }
+
+  .tickets-page .page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 2px 2px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 24px;
+  }
+
+  .tickets-page .page-header h1 {
+    margin: 0;
+    font-size: 32px;
+    letter-spacing: 0.2px;
+    font-weight: 750;
+    line-height: 1.1;
+    color: var(--text-color);
+  }
+
+  .tickets-page .page-header p {
+    margin: 8px 0 0;
+    color: var(--muted-color);
+    font-size: 14px;
+  }
+
+  .tickets-page .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 0 20px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-wrap: wrap;
+  }
+
+  .tickets-page .toolbar .search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 8px 12px;
+    flex: 1;
+    min-width: 180px;
+  }
+
+  .tickets-page .toolbar .search-box input {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    font-size: 13px;
+    width: 100%;
+    outline: none;
+  }
+
+  .tickets-page .toolbar .filter-select {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: var(--text-color);
+    font-size: 13px;
+    outline: none;
+    min-width: 150px;
+  }
+
+  .tickets-page .toolbar .filter-select option {
+    background: #081426;
+    color: white;
+  }
+
+  .tickets-page .toolbar .btn-search {
+    padding: 9px 16px;
+    background: var(--accent-blue);
+    color: white;
+    border-radius: 8px;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .tickets-page .table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+  }
+
+  .tickets-page .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .tickets-page .data-table th {
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.88);
+    background: rgba(0, 0, 0, 0.22);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+    padding: 16px 14px;
+    text-transform: uppercase;
+    font-size: 11px;
+    text-align: left;
+  }
+
+  .tickets-page .data-table tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.15s;
+  }
+
+  .tickets-page .data-table tbody tr:hover {
+    background: rgba(58, 160, 255, 0.06);
+  }
+
+  .tickets-page .data-table td {
+    padding: 16px 14px;
+    color: var(--text-color);
+    font-size: 14px;
+    vertical-align: middle;
+  }
+
+  .tickets-page .badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+
+  .tickets-page .badge--valide {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: var(--accent-success);
+  }
+
+  .tickets-page .badge--annule {
+    background: rgba(255, 77, 109, 0.12);
+    border: 1px solid rgba(255, 77, 109, 0.3);
+    color: var(--accent-danger);
+  }
+
+  .tickets-page .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-color);
+    text-decoration: none;
+    transition: 0.15s;
+  }
+
+  .tickets-page .action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .tickets-page .action-btn--danger {
+    border-color: rgba(255, 77, 109, 0.3);
+    background: rgba(255, 77, 109, 0.1);
+    color: var(--accent-danger);
+  }
+
+  .tickets-page .action-btn--danger:hover {
+    background: rgba(255, 77, 109, 0.2);
+  }
+
+  .pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 24px;
+  }
+
+  .pagination a, .pagination span {
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-color);
+    text-decoration: none;
+    font-size: 13px;
+  }
+
+  .pagination .current {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    font-weight: bold;
+  }
+
+  /* Modal Details */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.8);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .modal-overlay.active {
+    display: flex;
+  }
+
+  .modal-card {
+    background: #0b1222;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px;
+    width: 100%;
+    max-width: 500px;
+    padding: 24px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+  }
+
+  .modal-card h3 {
+    margin: 0 0 16px 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: white;
+  }
+
+  .lines-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+  }
+
+  .lines-table th, .lines-table td {
+    padding: 10px;
+    font-size: 13px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    text-align: left;
+  }
+
+  .lines-table th {
+    background: rgba(0,0,0,0.2);
+    color: rgba(255,255,255,0.6);
+  }
+</style>
+
+<div class="tickets-page">
+  <header class="page-header">
+    <div>
+      <h1>🎟️ Tickets des Agents</h1>
+      <p>Consulter, supprimer ou imprimer les tickets émis par vos agents.</p>
+    </div>
+  </header>
+
+  <!-- SEARCH & FILTERS -->
+  <form method="get" class="toolbar">
+    <div class="search-box">
+      <span>🔍</span>
+      <input type="text" name="q" value="{{ q_search }}" placeholder="Rechercher par numéro ou ID de ticket...">
+    </div>
+
+    <select name="agent" class="filter-select">
+      <option value="">Tous les agents</option>
+      {% for a in agents %}
+        <option value="{{ a.id }}" {% if agent_id == a.id|stringformat:"i" %}selected{% endif %}>{{ a.nom }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="tirage" class="filter-select">
+      <option value="">Tous les tirages</option>
+      {% for t in tirages %}
+        <option value="{{ t.id }}" {% if tirage_id == t.id|stringformat:"i" %}selected{% endif %}>{{ t.nom }}</option>
+      {% endfor %}
+    </select>
+
+    <select name="statut" class="filter-select">
+      <option value="">Tous les statuts</option>
+      <option value="VALIDE" {% if statut == "VALIDE" %}selected{% endif %}>Valide</option>
+      <option value="ANNULE" {% if statut == "ANNULE" %}selected{% endif %}>Annulé</option>
+    </select>
+
+    <button type="submit" class="btn-search">Filtrer</button>
+    {% if q_search or agent_id or tirage_id or statut %}
+      <a href="{% url 'admin_portal:tickets_list' %}" class="action-btn">Effacer</a>
+    {% endif %}
+  </form>
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Numéro</th>
+          <th>Agent</th>
+          <th>Tirage</th>
+          <th>Date de création</th>
+          <th>Mise</th>
+          <th>Gains</th>
+          <th>Statut</th>
+          <th style="text-align: right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in page_obj %}
+        <tr id="row-{{ t.id }}">
+          <td><strong>{{ t.numero_ticket }}</strong></td>
+          <td>{{ t.agent.nom }}</td>
+          <td>{{ t.tirage.nom }}</td>
+          <td>{{ t.created_at|date:"d/m/Y H:i:s" }}</td>
+          <td>{{ t.total_mise }} HTG</td>
+          <td style="font-weight: bold; {% if t.is_winner %}color: var(--accent-success);{% endif %}">
+            {{ t.total_gain_du }} HTG
+          </td>
+          <td>
+            {% if t.statut == 'VALIDE' %}
+              <span class="badge badge--valide">Valide</span>
+            {% else %}
+              <span class="badge badge--annule">Annulé</span>
+            {% endif %}
+          </td>
+          <td style="text-align: right;">
+            <div style="display: inline-flex; gap: 6px;">
+              <!-- Details Button -->
+              <button class="action-btn" onclick="showTicketDetails('{{ t.id }}')">👁️ Détails</button>
+              
+              <!-- PDF Download Button -->
+              <a class="action-btn" href="{% url 'admin_portal:api_ticket_pdf_admin' t.id %}" target="_blank">📄 PDF</a>
+
+              <!-- Void/Delete Button -->
+              {% if t.can_delete_admin %}
+                <button class="action-btn action-btn--danger" id="btn-void-{{ t.id }}" onclick="voidTicket('{{ t.id }}')">🗑️ Annuler</button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="8" style="text-align: center; padding: 40px; color: var(--muted-color);">
+            Aucun ticket trouvé.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- PAGINATION -->
+  {% if page_obj.has_other_pages %}
+  <div class="pagination">
+    {% if page_obj.has_previous %}
+      <a href="?page=1{% if q_search %}&q={{ q_search }}{% endif %}{% if agent_id %}&agent={{ agent_id }}{% endif %}{% if tirage_id %}&tirage={{ tirage_id }}{% endif %}{% if statut %}&statut={{ statut }}{% endif %}">&laquo; Début</a>
+      <a href="?page={{ page_obj.previous_page_number }}{% if q_search %}&q={{ q_search }}{% endif %}{% if agent_id %}&agent={{ agent_id }}{% endif %}{% if tirage_id %}&tirage={{ tirage_id }}{% endif %}{% if statut %}&statut={{ statut }}{% endif %}">Précédent</a>
+    {% endif %}
+
+    <span>Page {{ page_obj.number }} sur {{ page_obj.paginator.num_pages }}</span>
+
+    {% if page_obj.has_next %}
+      <a href="?page={{ page_obj.next_page_number }}{% if q_search %}&q={{ q_search }}{% endif %}{% if agent_id %}&agent={{ agent_id }}{% endif %}{% if tirage_id %}&tirage={{ tirage_id }}{% endif %}{% if statut %}&statut={{ statut }}{% endif %}">Suivant</a>
+      <a href="?page={{ page_obj.paginator.num_pages }}{% if q_search %}&q={{ q_search }}{% endif %}{% if agent_id %}&agent={{ agent_id }}{% endif %}{% if tirage_id %}&tirage={{ tirage_id }}{% endif %}{% if statut %}&statut={{ statut }}{% endif %}">Fin &raquo;</a>
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<!-- Modal Ticket Details -->
+<div class="modal-overlay" id="detailsModal">
+  <div class="modal-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 12px; margin-bottom: 16px;">
+      <h3 style="margin:0;" id="modalTicketTitle">Détails du ticket</h3>
+      <button style="background:none; border:none; color:white; font-size: 20px; cursor:pointer;" onclick="closeModal()">×</button>
+    </div>
+    
+    <div style="color: rgba(255,255,255,0.8); font-size: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+      <div><strong>Agent:</strong> <span id="modalAgentName">-</span></div>
+      <div><strong>Tirage:</strong> <span id="modalTirageName">-</span></div>
+      <div><strong>Date:</strong> <span id="modalTicketDate">-</span></div>
+      <div><strong>Mise totale:</strong> <span id="modalTotalMise">-</span></div>
+    </div>
+
+    <table class="lines-table">
+      <thead>
+        <tr>
+          <th>Jeu</th>
+          <th>Valeur</th>
+          <th>Mise</th>
+          <th>Gain potentiel</th>
+        </tr>
+      </thead>
+      <tbody id="modalLinesBody">
+        <!-- populated dynamically -->
+      </tbody>
+    </table>
+    
+    <div style="margin-top: 20px; text-align: right;">
+      <button class="action-btn" onclick="closeModal()">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+      const cookies = document.cookie.split(';');
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === (name + '=')) {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  async function showTicketDetails(ticketId) {
+    try {
+      const response = await fetch(`/portal/api/tickets/search/?q=${ticketId}`);
+      if (!response.ok) throw new Error("Ticket non trouvé");
+      const data = await response.json();
+      
+      if (data.ticket) {
+        const t = data.ticket;
+        document.getElementById('modalTicketTitle').textContent = `Ticket ${t.numero}`;
+        document.getElementById('modalAgentName').textContent = t.agent.nom;
+        document.getElementById('modalTirageName').textContent = t.tirage.nom;
+        document.getElementById('modalTicketDate').textContent = new Date(t.created_at).toLocaleString('fr-FR');
+        document.getElementById('modalTotalMise').textContent = `${t.total_mise} HTG`;
+        
+        const linesBody = document.getElementById('modalLinesBody');
+        linesBody.innerHTML = '';
+        t.lines.forEach(l => {
+          linesBody.innerHTML += `
+            <tr>
+              <td><strong>${l.jeu.toUpperCase()}</strong></td>
+              <td>${l.valeur}</td>
+              <td>${l.mise} HTG</td>
+              <td>${l.potentiel_gain} HTG</td>
+            </tr>
+          `;
+        });
+        
+        document.getElementById('detailsModal').classList.add('active');
+      }
+    } catch (err) {
+      alert("Erreur de récupération des détails : " + err.message);
+    }
+  }
+
+  function closeModal() {
+    document.getElementById('detailsModal').classList.remove('active');
+  }
+
+  async function voidTicket(ticketId) {
+    if (!confirm("Voulez-vous vraiment annuler ce ticket ? Cette action est irréversible et recréditera/reversera le solde.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/portal/api/tickets/${ticketId}/void/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken')
+        }
+      });
+      const data = await response.json();
+      
+      if (data.success) {
+        alert("Le ticket a été annulé avec succès.");
+        // Reload row or change status badge
+        const row = document.getElementById(`row-${ticketId}`);
+        if (row) {
+          const badge = row.querySelector('.badge');
+          if (badge) {
+            badge.className = 'badge badge--annule';
+            badge.textContent = 'Annulé';
+          }
+          const voidBtn = document.getElementById(`btn-void-${ticketId}`);
+          if (voidBtn) voidBtn.remove();
+        }
+      } else {
+        alert("Échec de l'annulation : " + (data.error || "Erreur inconnue"));
+      }
+    } catch (err) {
+      alert("Erreur d'annulation : " + err.message);
+    }
+  }
+</script>
+{% endblock %}

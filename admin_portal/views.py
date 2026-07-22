@@ -2596,3 +2596,72 @@ def payment_success(request):
 def payment_cancel(request):
     return render(request, "admin_portal/payment_status.html", {"status": "cancel"})
 
+
+@login_required
+def tickets_list(request):
+    guard = _portal_guard(request)
+    if guard:
+        return guard
+
+    guard2 = _require_admin(request)
+    if guard2:
+        return guard2
+
+    borlette = get_user_borlette(request.user)
+    
+    q_search = request.GET.get("q", "").strip()
+    agent_id = request.GET.get("agent", "")
+    tirage_id = request.GET.get("tirage", "")
+    statut = request.GET.get("statut", "")
+
+    from agent_portal.models import Ticket, TicketStatus
+    tickets = Ticket.objects.filter(borlette=borlette).select_related("agent", "tirage").order_by("-created_at")
+
+    if q_search:
+        tickets = tickets.filter(
+            models.Q(numero_ticket__icontains=q_search) | 
+            models.Q(id__icontains=q_search)
+        )
+    if agent_id:
+        tickets = tickets.filter(agent_id=agent_id)
+    if tirage_id:
+        tickets = tickets.filter(tirage_id=tirage_id)
+    if statut:
+        tickets = tickets.filter(statut=statut)
+
+    # Let's annotate for UI action delete check
+    now = timezone.now()
+    from datetime import timedelta
+
+    # Paginate
+    from django.core.paginator import Paginator
+    paginator = Paginator(tickets, 50)
+    page_number = request.GET.get("page")
+    page_obj = paginator.get_page(page_number)
+
+    # Re-apply the can_delete annotation on page items
+    for t in page_obj.object_list:
+        is_draw_open = (t.tirage and t.tirage.etat_ouverture == "OUVERT") if t.tirage else True
+        t.can_delete_admin = (
+            ((now - t.created_at) <= timedelta(minutes=2) or is_draw_open)
+            and t.total_gain_paye == 0
+            and t.statut != TicketStatus.ANNULE
+        )
+
+    agents = Agent.objects.filter(borlette=borlette).order_by("nom")
+    tirages = Tirage.objects.filter(borlette=borlette).order_by("nom")
+
+    return render(
+        request,
+        "admin_portal/tickets_list.html",
+        {
+            "page_obj": page_obj,
+            "agents": agents,
+            "tirages": tirages,
+            "q_search": q_search,
+            "agent_id": agent_id,
+            "tirage_id": tirage_id,
+            "statut": statut,
+        }
+    )
+

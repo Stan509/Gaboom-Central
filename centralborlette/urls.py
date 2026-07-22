@@ -37,6 +37,8 @@ urlpatterns = [
     path('partner/', include('accounts.partner_urls')),
     path('superadmin/dashboard/', accounts_views.superadmin_dashboard, name='superadmin_dashboard'),
     path('superadmin/borlette/<int:borlette_id>/toggle-status/', accounts_views.superadmin_toggle_borlette_status, name='superadmin_toggle_borlette_status'),
+    path('superadmin/tirages/', accounts_views.superadmin_tirages, name='superadmin_tirages'),
+    path('superadmin/tirages/<int:tirage_id>/toggle/', accounts_views.superadmin_toggle_tirage, name='superadmin_toggle_tirage'),
     path('superadmin/api-config/', accounts_views.superadmin_api_config, name='superadmin_api_config'),
     path('superadmin/payment-config/', accounts_views.superadmin_payment_config, name='superadmin_payment_config'),
     path('superadmin/recovery/', accounts_views.superadmin_recovery_requests, name='superadmin_recovery_requests'),

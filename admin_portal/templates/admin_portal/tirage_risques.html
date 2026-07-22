@@ -872,6 +872,10 @@
       <option value="yes">Bloqué admin: Oui</option>
       <option value="no">Bloqué admin: Non</option>
     </select>
+    <select id="sortSelect" class="filter-select">
+      <option value="numero">Trier par: Valeur</option>
+      <option value="mises_desc">Trier par: Mises (Décroissant)</option>
+    </select>
   </div>
 
   <!-- TABLE -->
@@ -1020,6 +1024,24 @@
   if (searchInput) searchInput.addEventListener('input', filterRows);
   if (filterAuto) filterAuto.addEventListener('change', filterRows);
   if (filterAdmin) filterAdmin.addEventListener('change', filterRows);
+
+  const sortSelect = document.getElementById('sortSelect');
+  if (sortSelect) {
+    sortSelect.addEventListener('change', function() {
+      const mode = this.value;
+      const rowsArray = Array.from(rows);
+      if (mode === 'numero') {
+        rowsArray.sort((a, b) => a.dataset.valeur.localeCompare(b.dataset.valeur));
+      } else if (mode === 'mises_desc') {
+        rowsArray.sort((a, b) => {
+          const mA = parseFloat(a.querySelector('.col-mises').textContent) || 0;
+          const mB = parseFloat(b.querySelector('.col-mises').textContent) || 0;
+          return mB - mA;
+        });
+      }
+      rowsArray.forEach(row => tbody.appendChild(row));
+    });
+  }
 })();
 </script>
 {% endblock %}

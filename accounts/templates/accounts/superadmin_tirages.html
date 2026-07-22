@@ -1,0 +1,330 @@
+{% extends "admin_portal/_page_shell.html" %}
+{% load static %}
+
+{% block title %}Contrôle des Tirages • Central Borlette{% endblock %}
+{% block page_title %}Contrôle des Tirages{% endblock %}
+
+{% block page_meta %}
+  <div class="text-xs text-slate-700 dark:text-slate-200">
+    Supervision et activation/désactivation des tirages de toutes les borlettes
+  </div>
+{% endblock %}
+
+{% block page_body %}
+<style>
+  .portal-page {
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .portal-page__header {
+    display: none !important;
+  }
+  .portal-page__body {
+    width: 100% !important;
+    max-width: none !important;
+  }
+  .portal-main {
+    padding: 0 !important;
+  }
+
+  .super-tirages {
+    --bg0: #070a12;
+    --bg1: #081426;
+    --card-bg: rgba(10, 18, 35, 0.58);
+    --card-bg2: rgba(12, 28, 55, 0.34);
+    --border-color: rgba(255, 255, 255, 0.08);
+    --text-color: rgba(255, 255, 255, 0.92);
+    --muted-color: rgba(255, 255, 255, 0.62);
+    --accent-blue: #3aa0ff;
+    --accent-violet: #7c4dff;
+    --accent-danger: #ff4d6d;
+    --accent-success: #10b981;
+    --accent-warning: #f59e0b;
+    --shadow-card: 0 18px 45px rgba(0, 0, 0, 0.45);
+
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    padding: 28px 32px 48px;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    box-sizing: border-box;
+  }
+
+  .super-tirages .page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 2px 2px 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 24px;
+  }
+
+  .super-tirages .page-header h1 {
+    margin: 0;
+    font-size: 32px;
+    letter-spacing: 0.2px;
+    font-weight: 750;
+    line-height: 1.1;
+    color: var(--text-color);
+  }
+
+  .super-tirages .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 0 20px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-wrap: wrap;
+  }
+
+  .super-tirages .toolbar .search-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 8px 12px;
+    flex: 1;
+    min-width: 180px;
+  }
+
+  .super-tirages .toolbar .search-box input {
+    background: none;
+    border: none;
+    color: var(--text-color);
+    font-size: 13px;
+    width: 100%;
+    outline: none;
+  }
+
+  .super-tirages .toolbar .filter-select {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: var(--text-color);
+    font-size: 13px;
+    outline: none;
+    min-width: 150px;
+  }
+
+  .super-tirages .toolbar .filter-select option {
+    background: #081426;
+    color: white;
+  }
+
+  .super-tirages .toolbar .btn-search {
+    padding: 9px 16px;
+    background: var(--accent-blue);
+    color: white;
+    border-radius: 8px;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .super-tirages .table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+  }
+
+  .super-tirages .data-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .super-tirages .data-table th {
+    font-weight: 800;
+    color: rgba(255, 255, 255, 0.88);
+    background: rgba(0, 0, 0, 0.22);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+    padding: 16px 14px;
+    text-transform: uppercase;
+    font-size: 11px;
+    text-align: left;
+  }
+
+  .super-tirages .data-table tbody tr {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.15s;
+  }
+
+  .super-tirages .data-table tbody tr:hover {
+    background: rgba(58, 160, 255, 0.06);
+  }
+
+  .super-tirages .data-table td {
+    padding: 16px 14px;
+    color: var(--text-color);
+    font-size: 14px;
+    vertical-align: middle;
+  }
+
+  .super-tirages .badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+
+  .super-tirages .badge--success {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: var(--accent-success);
+  }
+
+  .super-tirages .badge--warning {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: var(--accent-warning);
+  }
+
+  .super-tirages .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-color);
+    text-decoration: none;
+    transition: 0.15s;
+  }
+
+  .super-tirages .action-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .super-tirages .action-btn--suspend {
+    border-color: rgba(245, 158, 11, 0.3);
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--accent-warning);
+  }
+
+  .super-tirages .action-btn--suspend:hover {
+    background: rgba(245, 158, 11, 0.2);
+  }
+
+  .super-tirages .action-btn--activate {
+    border-color: rgba(16, 185, 129, 0.3);
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--accent-success);
+  }
+
+  .super-tirages .action-btn--activate:hover {
+    background: rgba(16, 185, 129, 0.2);
+  }
+</style>
+
+<div class="super-tirages">
+  <header class="page-header">
+    <div>
+      <h1>🎯 Contrôle Global des Tirages</h1>
+      <p>Supervisez et modifiez le statut (Activer/Suspendre) des tirages de toutes les borlettes.</p>
+    </div>
+  </header>
+
+  <!-- SEARCH & FILTERS -->
+  <form method="get" class="toolbar">
+    <div class="search-box">
+      <span>🔍</span>
+      <input type="text" name="q" value="{{ q_search }}" placeholder="Rechercher par nom de tirage...">
+    </div>
+
+    <select name="borlette" class="filter-select">
+      <option value="">Toutes les borlettes</option>
+      {% for b in borlettes %}
+        <option value="{{ b.id }}" {% if borlette_id == b.id %}selected{% endif %}>{{ b.nom_borlette }}</option>
+      {% endfor %}
+    </select>
+
+    <button type="submit" class="btn-search">Filtrer</button>
+    {% if q_search or borlette_id %}
+      <a href="{% url 'superadmin_tirages' %}" class="action-btn">Effacer</a>
+    {% endif %}
+  </form>
+
+  {% if messages %}
+    <div style="margin-bottom: 20px;">
+      {% for m in messages %}
+        <div class="badge {% if m.tags == 'success' %}badge--success{% else %}badge--warning{% endif %}" style="padding: 10px; width: 100%; border-radius: 8px;">
+          {{ m }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Borlette</th>
+          <th>Tirage</th>
+          <th>Type</th>
+          <th>Heure Fermeture</th>
+          <th>Statut</th>
+          <th>État</th>
+          <th style="text-align: right;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tirages %}
+        <tr>
+          <td><strong>{{ t.borlette.nom_borlette }}</strong></td>
+          <td>{{ t.nom }}</td>
+          <td>{{ t.get_type_display }}</td>
+          <td>{{ t.heure_fermeture|time:"H:i" }}</td>
+          <td>
+            {% if t.statut == 'ACTIF' %}
+              <span class="badge badge--success">Actif</span>
+            {% else %}
+              <span class="badge badge--warning">Suspendu</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if t.etat_ouverture == 'OUVERT' %}
+              <span class="badge badge--success" style="background: rgba(58, 160, 255, 0.15); border-color: rgba(58, 160, 255, 0.3); color: var(--accent-blue);">Ouvert</span>
+            {% else %}
+              <span class="badge badge--warning" style="background: rgba(255, 77, 109, 0.12); border-color: rgba(255, 77, 109, 0.3); color: var(--accent-danger);">Fermé</span>
+            {% endif %}
+          </td>
+          <td style="text-align: right;">
+            <form method="post" action="{% url 'superadmin_toggle_tirage' t.id %}" style="display: inline;">
+              {% csrf_token %}
+              {% if t.statut == 'ACTIF' %}
+                <button type="submit" class="action-btn action-btn--suspend">⏸️ Suspendre</button>
+              {% else %}
+                <button type="submit" class="action-btn action-btn--activate">▶️ Activer</button>
+              {% endif %}
+            </form>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="7" style="text-align: center; padding: 40px; color: var(--muted-color);">
+            Aucun tirage trouvé.
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

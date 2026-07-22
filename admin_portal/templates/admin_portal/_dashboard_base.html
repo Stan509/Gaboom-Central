@@ -95,6 +95,10 @@
               <i data-lucide="user-plus" class="h-5 w-5 shrink-0"></i>
               <span class="whitespace-nowrap">Agents</span>
             </a>
+            <a class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition border border-transparent bg-white/30 text-slate-900 hover:bg-white/50 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 {% if request.resolver_match.url_name == 'tickets_list' %}border-gaboom-orange/60 bg-gaboom-orange/25 ring-1 ring-gaboom-orange/35{% endif %}" href="{% url 'admin_portal:tickets_list' %}">
+              <i data-lucide="ticket" class="h-5 w-5 shrink-0"></i>
+              <span class="whitespace-nowrap">Tickets</span>
+            </a>
             <a class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition border border-transparent bg-white/30 text-slate-900 hover:bg-white/50 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 {% if request.resolver_match.url_name == 'tirages' or request.resolver_match.url_name|slice:":7" == 'tirage_' %}border-gaboom-orange/60 bg-gaboom-orange/25 ring-1 ring-gaboom-orange/35{% endif %}" href="{% url 'admin_portal:tirages' %}">
               <i data-lucide="target" class="h-5 w-5 shrink-0"></i>
               <span class="whitespace-nowrap">Tirages</span>
@@ -114,6 +118,10 @@
               <a class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition border border-transparent bg-white/30 text-slate-900 hover:bg-white/50 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 {% if request.resolver_match.url_name == 'superadmin_dashboard' %}border-gaboom-orange/60 bg-gaboom-orange/25 ring-1 ring-gaboom-orange/35{% endif %}" href="{% url 'superadmin_dashboard' %}">
                 <i data-lucide="layout-dashboard" class="h-5 w-5 shrink-0"></i>
                 <span class="whitespace-nowrap">SuperAdmin Panel</span>
+              </a>
+              <a class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition border border-transparent bg-white/30 text-slate-900 hover:bg-white/50 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 {% if request.resolver_match.url_name == 'superadmin_tirages' %}border-gaboom-orange/60 bg-gaboom-orange/25 ring-1 ring-gaboom-orange/35{% endif %}" href="{% url 'superadmin_tirages' %}">
+                <i data-lucide="target" class="h-5 w-5 shrink-0"></i>
+                <span class="whitespace-nowrap">Contrôle des Tirages</span>
               </a>
               <a class="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-semibold transition border border-transparent bg-white/30 text-slate-900 hover:bg-white/50 dark:bg-white/5 dark:text-white dark:hover:bg-white/10 {% if request.resolver_match.url_name == 'superadmin_api_config' %}border-gaboom-orange/60 bg-gaboom-orange/25 ring-1 ring-gaboom-orange/35{% endif %}" href="{% url 'superadmin_api_config' %}">
                 <i data-lucide="settings-2" class="h-5 w-5 shrink-0"></i>
@@ -249,6 +257,9 @@
           {% endif %}
           <a class="flex flex-col items-center justify-center rounded-2xl py-2 text-xs font-semibold transition border border-transparent bg-white/10 text-white min-w-[48px] {% if request.resolver_match.url_name == 'agents' or request.resolver_match.url_name|slice:":6" == 'agent_' %}border-gaboom-orange/60 bg-gaboom-orange/25 ring-1 ring-gaboom-orange/35{% endif %}" href="{% url 'admin_portal:agents' %}" aria-label="Agents">
             <i data-lucide="user-plus" class="h-5 w-5"></i>
+          </a>
+          <a class="flex flex-col items-center justify-center rounded-2xl py-2 text-xs font-semibold transition border border-transparent bg-white/10 text-white min-w-[48px] {% if request.resolver_match.url_name == 'tickets_list' %}border-gaboom-orange/60 bg-gaboom-orange/25 ring-1 ring-gaboom-orange/35{% endif %}" href="{% url 'admin_portal:tickets_list' %}" aria-label="Tickets">
+            <i data-lucide="ticket" class="h-5 w-5"></i>
           </a>
           <a class="flex flex-col items-center justify-center rounded-2xl py-2 text-xs font-semibold transition border border-transparent bg-white/10 text-white min-w-[48px] {% if request.resolver_match.url_name == 'tirages' or request.resolver_match.url_name|slice:":7" == 'tirage_' %}border-gaboom-orange/60 bg-gaboom-orange/25 ring-1 ring-gaboom-orange/35{% endif %}" href="{% url 'admin_portal:tirages' %}" aria-label="Tirages">
             <i data-lucide="target" class="h-5 w-5"></i>

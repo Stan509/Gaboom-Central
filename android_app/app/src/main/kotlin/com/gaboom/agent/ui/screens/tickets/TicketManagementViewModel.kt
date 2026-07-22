@@ -179,9 +179,10 @@ class TicketManagementViewModel @Inject constructor(
             isWinner = false,
             isPaid = false,
             canPay = false,
-            canVoid = entity.syncStatus == com.gaboom.agent.data.local.SyncStatus.PENDING ||
+            canVoid = (entity.syncStatus == com.gaboom.agent.data.local.SyncStatus.PENDING ||
                     entity.syncStatus == com.gaboom.agent.data.local.SyncStatus.LOCAL_PENDING ||
-                    entity.syncStatus == com.gaboom.agent.data.local.SyncStatus.PRINTED,
+                    entity.syncStatus == com.gaboom.agent.data.local.SyncStatus.PRINTED) &&
+                    ((System.currentTimeMillis() - entity.createdAt) / 60000.0 < 2.0),
             canReprint = true,
             createdAt = createdStr,
             ageMinutes = (System.currentTimeMillis() - entity.createdAt) / 60000.0

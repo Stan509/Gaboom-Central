@@ -335,9 +335,13 @@ def superadmin_dashboard(request: HttpRequest):
     from django.db.models import Sum, Count, Q
     total_revenue = FinancialTransaction.objects.aggregate(total=Sum('total_amount'))['total'] or 0
 
+    from agent_portal.models import Ticket, TicketStatus
     borlettes = Borlette.objects.select_related('user').annotate(
         num_agents=Count('agents')
     ).order_by('nom_borlette')
+
+    for b in borlettes:
+        b.ca = Ticket.objects.filter(borlette=b, statut=TicketStatus.VALIDE).aggregate(total=Sum('total_mise'))['total'] or 0
 
     search_query = request.GET.get('q', '').strip()
     if search_query:
@@ -591,6 +595,57 @@ def borlette_logo_view(request, borlette_id):
             pass
             
     raise Http404("Logo non trouvé")
+
+
+@login_required
+def superadmin_tirages(request: HttpRequest):
+    if not request.user.is_superuser:
+        messages.error(request, "Accès réservé au superadmin")
+        return redirect("/admin/")
+
+    from accounts.models import Tirage, TirageStatus
+    
+    q_search = request.GET.get("q", "").strip()
+    borlette_id = request.GET.get("borlette", "")
+
+    tirages = Tirage.objects.all().select_related("borlette").order_by("borlette__nom_borlette", "nom")
+
+    if q_search:
+        tirages = tirages.filter(nom__icontains=q_search)
+    if borlette_id:
+        tirages = tirages.filter(borlette_id=borlette_id)
+
+    borlettes = Borlette.objects.all().order_by("nom_borlette")
+
+    return render(
+        request,
+        "accounts/superadmin_tirages.html",
+        {
+            "tirages": tirages,
+            "borlettes": borlettes,
+            "q_search": q_search,
+            "borlette_id": int(borlette_id) if borlette_id else None,
+        }
+    )
+
+
+@login_required
+def superadmin_toggle_tirage(request: HttpRequest, tirage_id: int):
+    if not request.user.is_superuser:
+        messages.error(request, "Accès réservé au superadmin")
+        return redirect("/admin/")
+
+    if request.method == "POST":
+        from accounts.models import Tirage, TirageStatus
+        tirage = get_object_or_404(Tirage, id=tirage_id)
+        if tirage.statut == TirageStatus.ACTIF:
+            tirage.statut = TirageStatus.SUSPENDU
+        else:
+            tirage.statut = TirageStatus.ACTIF
+        
+        tirage.save(update_fields=["statut"])
+        messages.success(request, f"Le statut du tirage '{tirage.nom}' a été modifié en {tirage.get_statut_display()}.")
+    return redirect("superadmin_tirages")
 
 
 

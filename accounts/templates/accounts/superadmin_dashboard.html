@@ -108,6 +108,7 @@
                 <th class="pb-3 font-semibold">Administrateur</th>
                 <th class="pb-3 font-semibold">Téléphone</th>
                 <th class="pb-3 font-semibold text-center">Nombre d'agents</th>
+                <th class="pb-3 font-semibold text-center">Chiffre d'Affaires</th>
                 <th class="pb-3 font-semibold text-center">Statut Admin</th>
                 <th class="pb-3 font-semibold text-right">Actions</th>
               </tr>
@@ -125,6 +126,12 @@
                     <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-white/5">
                       <i data-lucide="users" class="h-3.5 w-3.5 text-amber-500"></i>
                       <span>{{ b.num_agents }}</span>
+                    </div>
+                  </td>
+                  <td class="py-4 text-center font-bold text-slate-800 dark:text-slate-200">
+                    <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 dark:bg-white/5">
+                      <i data-lucide="wallet" class="h-3.5 w-3.5 text-emerald-500"></i>
+                      <span>{{ b.ca }} HTG</span>
                     </div>
                   </td>
                   <td class="py-4 text-center">

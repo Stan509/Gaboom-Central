@@ -401,15 +401,22 @@ def api_login(request: HttpRequest) -> JsonResponse:
     # Get or create device registration for ticket number range
     from accounts.models import AgentDevice
     import secrets
-    device, created = AgentDevice.objects.get_or_create(
-        agent=agent,
-        device_id=device_signature,
-        defaults={
-            "device_name": f"Device-{device_signature[:8]}",
-            "device_secret": secrets.token_urlsafe(32),
-            "is_active": True,
-        }
-    )
+    device = AgentDevice.objects.filter(device_id=device_signature).first()
+    created = False
+    if device:
+        if device.agent != agent:
+            device.agent = agent
+            device.device_name = f"Device-{device_signature[:8]}"
+            device.save(update_fields=["agent", "device_name"])
+    else:
+        device = AgentDevice.objects.create(
+            agent=agent,
+            device_id=device_signature,
+            device_name=f"Device-{device_signature[:8]}",
+            device_secret=secrets.token_urlsafe(32),
+            is_active=True,
+        )
+        created = True
     
     if not device.device_secret:
         device.device_secret = secrets.token_urlsafe(32)
@@ -1615,10 +1622,10 @@ def api_ticket_list_agent(request: HttpRequest) -> JsonResponse:
         if status_filter and computed_status != status_filter:
             continue
         
-        # Check if can be voided (< 5 minutes and draw is open)
+        # Check if can be voided (< 2 minutes and draw is open)
         age_seconds = (now - ticket.created_at).total_seconds()
         is_draw_open = (ticket.tirage and ticket.tirage.etat_ouverture == "OUVERT") if ticket.tirage else True
-        can_void = age_seconds < 300 and ticket.statut != TicketStatus.ANNULE and not ticket.is_paid and is_draw_open
+        can_void = age_seconds < 120 and ticket.statut != TicketStatus.ANNULE and not ticket.is_paid and is_draw_open
         age_minutes = age_seconds / 60.0
         
         # Count bets
@@ -1779,10 +1786,10 @@ def api_ticket_group_search(request: HttpRequest, group_id: str) -> JsonResponse
         else:
             computed_status = "pending"
         
-        # Vérifier si annulation possible (< 5 minutes et tirage ouvert)
+        # Vérifier si annulation possible (< 2 minutes et tirage ouvert)
         age_seconds = (now - ticket.created_at).total_seconds()
         is_draw_open = (ticket.tirage and ticket.tirage.etat_ouverture == "OUVERT") if ticket.tirage else True
-        can_void = age_seconds < 300 and ticket.statut != TicketStatus.ANNULE and not ticket.is_paid and is_draw_open
+        can_void = age_seconds < 120 and ticket.statut != TicketStatus.ANNULE and not ticket.is_paid and is_draw_open
         
         lines = []
         for line in ticket.lignes.all():
@@ -1925,9 +1932,9 @@ def api_ticket_void_agent(request: HttpRequest, ticket_id: str) -> JsonResponse:
     now = timezone.now()
     age = now - ticket.created_at
 
-    if age > timedelta(minutes=5):
+    if age > timedelta(minutes=2):
         return _json_error(
-            f"Annulation impossible: ticket créé il y a {int(age.total_seconds())} secondes (max 5 min)",
+            f"Annulation impossible: ticket créé il y a {int(age.total_seconds())} secondes (max 2 min)",
             400
         )
 

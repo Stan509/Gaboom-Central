@@ -1033,10 +1033,12 @@ class AgentDevice(models.Model):
     
     def save(self, *args, **kwargs):
         if self._state.adding:
-            count = AgentDevice.objects.count()
-            self.ticket_number_start = 5000000001 + (count * 1000000)
-            self.ticket_number_end = self.ticket_number_start + 999998
-            self.ticket_number_current = self.ticket_number_start
+            from django.db.models import Max
+            max_end = AgentDevice.objects.aggregate(max_val=Max("ticket_number_end"))["max_val"]
+            start_num = (max_end or 5000000000) + 1
+            self.ticket_number_start = start_num
+            self.ticket_number_end = start_num + 999998
+            self.ticket_number_current = start_num
         super().save(*args, **kwargs)
 
     def mark_used(self):

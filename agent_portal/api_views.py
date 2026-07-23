@@ -407,7 +407,13 @@ def api_login(request: HttpRequest) -> JsonResponse:
         if device.agent != agent:
             device.agent = agent
             device.device_name = f"Device-{device_signature[:8]}"
-            device.save(update_fields=["agent", "device_name"])
+            from django.db.models import Max
+            max_end = AgentDevice.objects.aggregate(max_val=Max("ticket_number_end"))["max_val"]
+            start_num = (max_end or 5000000000) + 1
+            device.ticket_number_start = start_num
+            device.ticket_number_end = start_num + 999998
+            device.ticket_number_current = start_num
+            device.save()
     else:
         device = AgentDevice.objects.create(
             agent=agent,

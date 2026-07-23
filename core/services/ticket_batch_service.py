@@ -407,7 +407,13 @@ class TicketBatchService:
                             continue
 
                     if ticket_number:
-                        existing_number_ticket = Ticket.objects.filter(numero_ticket=ticket_number, borlette=borlette).first()
+                        existing_number_ticket = Ticket.objects.filter(
+                            numero_ticket=ticket_number,
+                            borlette=borlette,
+                            agent=agent,
+                            tirage=draw,
+                            tirage_session_key=draw.session_key
+                        ).first()
                         if existing_number_ticket:
                             ex_heure = existing_number_ticket.tirage.heure_tirage.strftime("%H:%M") if (existing_number_ticket.tirage and existing_number_ticket.tirage.heure_tirage) else ""
                             ex_draw_name = f"{existing_number_ticket.tirage.nom} ({ex_heure})" if (existing_number_ticket.tirage and ex_heure) else draw_name_display

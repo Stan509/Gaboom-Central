@@ -286,7 +286,7 @@ class TicketRepository @Inject constructor(
                                 totalGainDu = info.totalGain ?: 0.0,
                                 totalGainPaye = 0.0,
                                 isWinner = (info.totalGain ?: 0.0) > 0.0,
-                                isPaid = info.statut.lowercase() == "paid",
+                                isPaid = info.statut.lowercase() == "paid" || info.statut.lowercase() == "paye",
                                 canPay = false,
                                 canVoid = false,
                                 canReprint = true,

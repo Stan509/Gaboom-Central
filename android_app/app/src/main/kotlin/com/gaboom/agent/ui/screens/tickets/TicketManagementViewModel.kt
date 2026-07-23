@@ -101,7 +101,7 @@ class TicketManagementViewModel @Inject constructor(
             )
 
             // Local pending tickets mapping
-            val pendingEntities = pendingTicketDao.getAll()
+            val pendingEntities = pendingTicketDao.getAll().filter { it.syncStatus != com.gaboom.agent.data.local.SyncStatus.SYNCED }
             val pendingListItems = pendingEntities.map { mapPendingToListItem(it) }
 
             val response = ticketRepository.listTickets(currentState.pageSize, offset)
@@ -169,7 +169,7 @@ class TicketManagementViewModel @Inject constructor(
                 com.gaboom.agent.data.local.SyncStatus.FAILED,
                 com.gaboom.agent.data.local.SyncStatus.UPLOAD_FAILED,
                 com.gaboom.agent.data.local.SyncStatus.CONFLICT -> "pending"
-                com.gaboom.agent.data.local.SyncStatus.SYNCED -> "paid"
+                com.gaboom.agent.data.local.SyncStatus.SYNCED -> "pending"
                 com.gaboom.agent.data.local.SyncStatus.VALIDATION_PENDING -> "pending"
             },
             numBets = count,

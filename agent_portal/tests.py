@@ -444,7 +444,7 @@ class CreateMultiEndpointTests(TestCase):
 
     @patch('agent_portal.api_views._get_agent_from_request')
     def test_create_multi_offline_sync_fails_with_drift(self, mock_get_agent):
-        """Offline ticket sync fails (status ANNULE) when clock drift exceeds 45 seconds"""
+        """Offline ticket sync fails (status ANNULE) when clock drift exceeds 35 seconds"""
         mock_get_agent.return_value = self.agent
         
         now_ms = int(timezone.now().timestamp() * 1000)
@@ -455,7 +455,7 @@ class CreateMultiEndpointTests(TestCase):
             ],
             "session_key": self.session_key,
             "created_at": now_ms - (5 * 60 * 1000),  # 5 minutes ago
-            "client_time": now_ms - 60000  # 60 seconds drift (> 45s)
+            "client_time": now_ms - 40000  # 40 seconds drift (> 35s)
         }
         
         signature, _ = self._calculate_hmac(
@@ -763,7 +763,7 @@ class CancellationAndDriftTests(TestCase):
             ],
             "session_key": self.session_key,
             "created_at": int(timezone.now().timestamp() * 1000),
-            "client_time": int((timezone.now() - timezone.timedelta(seconds=60)).timestamp() * 1000)  # 60s drift > 45s
+            "client_time": int((timezone.now() - timezone.timedelta(seconds=40)).timestamp() * 1000)  # 40s drift > 35s
         }
         response = self.client.post(
             "/api/agent/ticket/create-multi/",

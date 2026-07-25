@@ -201,7 +201,6 @@ class TicketBatchService:
                         if ticket_created_at:
                             try:
                                 import datetime
-                                from accounts.models import Resultat
 
                                 tz = timezone.get_default_timezone()
                                 ticket_dt = datetime.datetime.fromtimestamp(
@@ -209,30 +208,20 @@ class TicketBatchService:
                                     tz=datetime.timezone.utc
                                 ).astimezone(tz)
 
-                                if ticket_dt >= draw.session_started_at:
-                                    results_exist = Resultat.objects.filter(
-                                        tirage=draw, session_key=draw.session_key
-                                    ).exists()
+                                closing_time = draw.heure_fermeture
+                                if not closing_time and draw.heure_tirage:
+                                    closing_time = (datetime.datetime.combine(datetime.date.min, draw.heure_tirage) - datetime.timedelta(minutes=3)).time()
+
+                                if not closing_time:
+                                    tolerated_closure = True
                                 else:
-                                    results_exist = Resultat.objects.filter(
-                                        tirage=draw, session_key=draw_session_key
-                                    ).exists()
-
-                                if not results_exist:
-                                    closing_time = draw.heure_fermeture
-                                    if not closing_time and draw.heure_tirage:
-                                        closing_time = (datetime.datetime.combine(datetime.date.min, draw.heure_tirage) - datetime.timedelta(minutes=3)).time()
-
-                                    if not closing_time:
+                                    closing_dt = datetime.datetime.combine(
+                                        ticket_dt.date(),
+                                        closing_time
+                                    )
+                                    closing_dt = timezone.make_aware(closing_dt, tz)
+                                    if ticket_dt <= closing_dt:
                                         tolerated_closure = True
-                                    else:
-                                        closing_dt = datetime.datetime.combine(
-                                            ticket_dt.date(),
-                                            closing_time
-                                        )
-                                        closing_dt = timezone.make_aware(closing_dt, tz)
-                                        if ticket_dt <= closing_dt:
-                                            tolerated_closure = True
                             except Exception as e:
                                 logger.error(f"[BATCH] Error checking closed draw window: {e}")
 
@@ -270,7 +259,6 @@ class TicketBatchService:
                         if ticket_created_at:
                             try:
                                 import datetime
-                                from accounts.models import Resultat
 
                                 tz = timezone.get_default_timezone()
                                 ticket_dt = datetime.datetime.fromtimestamp(
@@ -278,30 +266,20 @@ class TicketBatchService:
                                     tz=datetime.timezone.utc
                                 ).astimezone(tz)
 
-                                if ticket_dt >= draw.session_started_at:
-                                    results_exist = Resultat.objects.filter(
-                                        tirage=draw, session_key=draw.session_key
-                                    ).exists()
+                                closing_time = draw.heure_fermeture
+                                if not closing_time and draw.heure_tirage:
+                                    closing_time = (datetime.datetime.combine(datetime.date.min, draw.heure_tirage) - datetime.timedelta(minutes=3)).time()
+
+                                if not closing_time:
+                                    tolerated = True
                                 else:
-                                    results_exist = Resultat.objects.filter(
-                                        tirage=draw, session_key=draw_session_key
-                                    ).exists()
-
-                                if not results_exist:
-                                    closing_time = draw.heure_fermeture
-                                    if not closing_time and draw.heure_tirage:
-                                        closing_time = (datetime.datetime.combine(datetime.date.min, draw.heure_tirage) - datetime.timedelta(minutes=3)).time()
-
-                                    if not closing_time:
+                                    closing_dt = datetime.datetime.combine(
+                                        ticket_dt.date(),
+                                        closing_time
+                                    )
+                                    closing_dt = timezone.make_aware(closing_dt, tz)
+                                    if ticket_dt <= closing_dt:
                                         tolerated = True
-                                    else:
-                                        closing_dt = datetime.datetime.combine(
-                                            ticket_dt.date(),
-                                            closing_time
-                                        )
-                                        closing_dt = timezone.make_aware(closing_dt, tz)
-                                        if ticket_dt <= closing_dt:
-                                            tolerated = True
                             except Exception as e:
                                 logger.error(f"[BATCH] Error checking offline ticket creation window: {e}")
 
@@ -443,7 +421,8 @@ class TicketBatchService:
                         # Update device's ticket number current to ensure consistency
                         try:
                             device = AgentDevice.objects.get(device_id=device_id, agent=agent, is_active=True)
-                            ticket_num_long = int(ticket_number)
+                            seq_part = ticket_number.split("-")[-1] if "-" in ticket_number else ticket_number
+                            ticket_num_long = int(seq_part)
                             if ticket_num_long > device.ticket_number_current:
                                 device.ticket_number_current = ticket_num_long
                                 device.save(update_fields=["ticket_number_current"])
@@ -461,8 +440,8 @@ class TicketBatchService:
                             try:
                                 server_now_ms = int(timezone.now().timestamp() * 1000)
                                 drift_ms = abs(server_now_ms - int(client_time))
-                                if drift_ms > 45000:
-                                    logger.warning(f"[BATCH] Clock drift {drift_ms}ms exceeded 45s for ticket {ticket_uuid}. Creating as ANNULE.")
+                                if drift_ms > 35000:
+                                    logger.warning(f"[BATCH] Clock drift {drift_ms}ms exceeded 35s for ticket {ticket_uuid}. Creating as ANNULE.")
                                     ticket_statut = TicketStatus.ANNULE
                             except Exception as e:
                                 logger.error(f"[BATCH] Error validating clock drift: {e}")
@@ -475,18 +454,25 @@ class TicketBatchService:
                             try:
                                 server_now_ms = int(timezone.now().timestamp() * 1000)
                                 drift_ms = abs(server_now_ms - int(client_time))
-                                if drift_ms > 45000:
-                                    logger.warning(f"[BATCH] Clock drift {drift_ms}ms exceeded 45s for ticket {ticket_uuid}. Creating as ANNULE.")
+                                if drift_ms > 35000:
+                                    logger.warning(f"[BATCH] Clock drift {drift_ms}ms exceeded 35s for ticket {ticket_uuid}. Creating as ANNULE.")
                                     ticket_statut = TicketStatus.ANNULE
                             except Exception as e:
                                 logger.error(f"[BATCH] Error validating clock drift: {e}")
+
+                    session_key_to_use = draw.session_key
+                    if is_offline_sync and draw_session_key:
+                        try:
+                            session_key_to_use = uuid.UUID(draw_session_key)
+                        except (ValueError, TypeError):
+                            pass
 
                     ticket = Ticket.objects.create(
                         id=ticket_id_to_use,
                         borlette=borlette,
                         agent=agent,
                         tirage=draw,
-                        tirage_session_key=draw.session_key,
+                        tirage_session_key=session_key_to_use,
                         group_id=group_id,
                         numero_ticket=ticket_number_to_use,
                         total_mise=Decimal("0"),
@@ -550,6 +536,9 @@ class TicketBatchService:
 
                         from agent_portal.services import create_cashbox_entry_for_sale
                         create_cashbox_entry_for_sale(ticket)
+
+                        from core.services.result_calculation_service import ResultCalculationService
+                        ResultCalculationService.calculate_single_ticket_gains(ticket)
 
                     log_audit(
                         action=AuditAction.TICKET_CREATE,

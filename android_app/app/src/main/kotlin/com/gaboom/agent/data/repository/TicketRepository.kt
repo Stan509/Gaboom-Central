@@ -121,13 +121,14 @@ class TicketRepository @Inject constructor(
         val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
 
         val cachedTirages = agentConfigDataStore.getCachedTirages()
+        val deviceCreds = agentConfigDataStore.getDeviceCredentials()
 
         val ticketsList = tirageIds.map { tirageId ->
             val localId = UUID.randomUUID().toString()
 
             // Allocate official number from server-allocated device range
             val seqNumber = agentConfigDataStore.getAndIncrementTicketNumber()
-            val localTicketNo = seqNumber.toString()
+            val localTicketNo = "POS-${deviceCreds?.deviceId?.takeLast(8)?.uppercase() ?: "OFF"}-$seqNumber"
 
             // Try to find the correct session key for this specific draw
             val correctSessionKey = cachedTirages.find { it.id == tirageId }?.sessionKey ?: sessionKey ?: ""
@@ -143,7 +144,6 @@ class TicketRepository @Inject constructor(
             val linesSummary = entries.take(5).joinToString(", ") { "${it.game}:${it.number}" } +
                 if (entries.size > 5) "..." else ""
 
-            val deviceCreds = agentConfigDataStore.getDeviceCredentials()
             val hmacSignature = if (deviceCreds != null) {
                 HmacUtil.signPayload(
                     deviceSecret = deviceCreds.deviceSecret,

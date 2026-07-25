@@ -300,3 +300,88 @@ class ResultCalculationService:
         if valeur in loto5_vals:
             return mise * coeff_loto5, True, "Loto5"
         return Decimal("0"), False, ""
+
+    @staticmethod
+    @transaction.atomic
+    def calculate_single_ticket_gains(ticket: Ticket) -> None:
+        """
+        Calcule les gains pour un ticket spécifique si un résultat existe pour sa session.
+        """
+        from accounts.models import Resultat, AdminPaymentSettings
+        from agent_portal.models import TicketStatus
+
+        if ticket.statut != TicketStatus.VALIDE:
+            return
+
+        resultat = Resultat.objects.filter(
+            tirage=ticket.tirage,
+            session_key=ticket.tirage_session_key,
+        ).first()
+
+        if not resultat:
+            # Pas encore de résultat saisi pour cette session, rien à faire
+            return
+
+        # Récupérer les coefficients de paiement
+        try:
+            settings = AdminPaymentSettings.objects.get(borlette=ticket.tirage.borlette)
+        except AdminPaymentSettings.DoesNotExist:
+            settings = None
+
+        coeff_1er = Decimal(str(getattr(settings, "boule_1er_lot_coeff", 0) or 0))
+        coeff_2eme = Decimal(str(getattr(settings, "boule_2eme_lot_coeff", 0) or 0))
+        coeff_3eme = Decimal(str(getattr(settings, "boule_3eme_lot_coeff", 0) or 0))
+        coeff_loto3 = Decimal(str(getattr(settings, "loto3_coeff", 0) or 0))
+        coeff_loto4 = Decimal(str(getattr(settings, "loto4_coeff", 0) or 0))
+        coeff_loto5 = Decimal(str(getattr(settings, "loto5_coeff", 0) or 0))
+        coeff_mariage = Decimal(str(getattr(settings, "mariage_normal_coeff", 0) or 0))
+        payout_mariage_gratuit = Decimal(str(getattr(settings, "mariage_gratuit_montant_fixe", 0) or 0))
+
+        # Extraire les numéros gagnants du résultat
+        lot1 = resultat.lot1
+        lot2 = resultat.lot2
+        lot3 = resultat.lot3
+        lots_set = {lot1, lot2, lot3}
+        
+        loto3_val = resultat.loto3
+        loto4_vals = {resultat.loto4_opt1, resultat.loto4_opt2, resultat.loto4_opt3}
+        loto5_vals = {resultat.loto5_opt1, resultat.loto5_opt2, resultat.loto5_opt3}
+
+        ticket_gain_du = Decimal("0")
+        ticket_is_winner = False
+
+        for line in ticket.lignes.all():
+            gain_du, is_winner, win_context = ResultCalculationService._calculate_line(
+                line=line,
+                lot1=lot1,
+                lot2=lot2,
+                lot3=lot3,
+                lots_set=lots_set,
+                loto3_val=loto3_val,
+                loto4_vals=loto4_vals,
+                loto5_vals=loto5_vals,
+                coeff_1er=coeff_1er,
+                coeff_2eme=coeff_2eme,
+                coeff_3eme=coeff_3eme,
+                coeff_loto3=coeff_loto3,
+                coeff_loto4=coeff_loto4,
+                coeff_loto5=coeff_loto5,
+                coeff_mariage=coeff_mariage,
+                payout_mariage_gratuit=payout_mariage_gratuit,
+            )
+
+            # Mise à jour de la ligne (idempotent)
+            line.gain_du = gain_du
+            line.is_winner = is_winner
+            line.win_context = win_context
+            line.save(update_fields=["gain_du", "is_winner", "win_context"])
+
+            ticket_gain_du += gain_du
+            if is_winner:
+                ticket_is_winner = True
+
+        # Mise à jour du ticket
+        ticket.total_gain_du = ticket_gain_du
+        ticket.is_winner = ticket_is_winner
+        ticket.computed_at = timezone.now()
+        ticket.save(update_fields=["total_gain_du", "is_winner", "computed_at"])

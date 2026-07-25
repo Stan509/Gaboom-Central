@@ -173,7 +173,7 @@ fun StatusCard(
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = when (uiState.offlineGateState.reason) {
-                                com.gaboom.agent.data.sync.SaleBlockedReason.OFFLINE_LIMIT_EXCEEDED -> "Vente bloquée: Hors-ligne > 25min"
+                                com.gaboom.agent.data.sync.SaleBlockedReason.OFFLINE_LIMIT_EXCEEDED -> "Vente bloquée: Hors-ligne > 1h"
                                 com.gaboom.agent.data.sync.SaleBlockedReason.CLOCK_DRIFT_EXCEEDED -> "Vente bloquée: Horloge désynchronisée (${uiState.clockDriftSeconds}s)"
                                 com.gaboom.agent.data.sync.SaleBlockedReason.NO_SERVER_CONTACT -> "Vente bloquée: Aucun contact serveur"
                                 else -> "Vente bloquée"

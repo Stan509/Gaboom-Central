@@ -15,8 +15,8 @@ import javax.inject.Singleton
 
 private const val TAG = "OfflineLimitEnforcer"
 
-/** 25 minutes in milliseconds */
-private const val MAX_OFFLINE_MS = 25L * 60L * 1000L
+/** 1 hour in milliseconds */
+private const val MAX_OFFLINE_MS = 60L * 60L * 1000L
 
 /** 2 minutes max clock drift allowed */
 private const val MAX_CLOCK_DRIFT_MS = 2L * 60L * 1000L
@@ -30,7 +30,7 @@ private const val GRACE_PERIOD_MS = 2L * 60L * 1000L
 enum class SaleBlockedReason {
     /** Allowed — nothing is blocking. */
     NONE,
-    /** Server unreachable for more than 25 minutes (and server is NOT in maintenance). */
+    /** Server unreachable for more than 60 minutes (and server is NOT in maintenance). */
     OFFLINE_LIMIT_EXCEEDED,
     /** Device clock drifted more than 2 minutes from server time. */
     CLOCK_DRIFT_EXCEEDED,
@@ -119,7 +119,7 @@ class OfflineLimitEnforcer @Inject constructor(
             Log.d(TAG, "No server contact recorded yet. Allowing offline sales.")
             _gateState.value = SaleGateState(
                 reason = SaleBlockedReason.NONE,
-                minutesBeforeBlock = 25
+                minutesBeforeBlock = 60
             )
             return
         }
@@ -161,7 +161,7 @@ class OfflineLimitEnforcer @Inject constructor(
      */
     fun getBlockMessage(): String = when (_gateState.value.reason) {
         SaleBlockedReason.OFFLINE_LIMIT_EXCEEDED ->
-            "Terminal hors-ligne depuis plus de 25 minutes. Reconnexion requise."
+            "Terminal hors-ligne depuis plus de 60 minutes. Reconnexion requise."
         SaleBlockedReason.CLOCK_DRIFT_EXCEEDED ->
             "Horloge désynchronisée (${_gateState.value.clockDriftSeconds}s de décalage). " +
             "Reconnectez-vous pour resynchroniser."

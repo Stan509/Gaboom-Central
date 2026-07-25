@@ -12,8 +12,8 @@ interface Policy {
  */
 data class OfflinePolicy(
     override val version: Int = 1,
-    /** Maximum offline duration in milliseconds (default 25 minutes). */
-    val maxDurationMillis: Long = 25L * 60 * 1000,
+    /** Maximum offline duration in milliseconds (default 60 minutes). */
+    val maxDurationMillis: Long = 60L * 60 * 1000,
     /** Maximum number of tickets that can be issued offline. */
     val maxTickets: Int = 500,
     /** Batch size for Merkle‑tree root calculation. */

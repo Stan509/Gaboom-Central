@@ -14,10 +14,11 @@ from accounts.models import UserRole
 
 
 def get_user_borlette(user):
-    """Return borlette for owner-admin or staff user.
+    """Return borlette for owner-admin, staff user, or sous-directeur.
 
     - Owner admin: user.borlette exists (OneToOne)
     - Staff: user.staffuser exists and is_active
+    - SousDirecteur: user.sous_directeur_profile exists and is_active
     """
     try:
         return user.borlette
@@ -27,6 +28,18 @@ def get_user_borlette(user):
     staff = getattr(user, "staffuser", None)
     if staff and getattr(staff, "is_active", False):
         return staff.borlette
+
+    sd = getattr(user, "sous_directeur_profile", None)
+    if sd and getattr(sd, "is_active", False):
+        return sd.borlette
+
+    return None
+
+
+def get_sous_directeur(user):
+    sd = getattr(user, "sous_directeur_profile", None)
+    if sd and getattr(sd, "is_active", False):
+        return sd
     return None
 
 

@@ -320,6 +320,7 @@ def api_affiliate_withdraw(request: HttpRequest) -> JsonResponse:
     if amount <= 0:
         return _json_error("Montant invalide", 400)
 
+    profile = getattr(request.user, "affiliate_profile", None)
     with transaction.atomic():
         # Lock existing paid withdrawals rows for this user to prevent double-spend races
         WithdrawalRequest.objects.select_for_update().filter(
@@ -335,6 +336,9 @@ def api_affiliate_withdraw(request: HttpRequest) -> JsonResponse:
             amount=amount,
             status=WithdrawalStatus.PENDING,
             payment_method=payment_method,
+            payment_phone=profile.payment_phone if profile else "",
+            payment_full_name=profile.payment_full_name if profile else "",
+            payment_location=profile.payment_location if profile else "",
         )
 
         log_audit(
@@ -345,6 +349,36 @@ def api_affiliate_withdraw(request: HttpRequest) -> JsonResponse:
             meta={"amount": str(amount), "payment_method": payment_method, "balance_before": str(bal)},
             request=request,
         )
+
+    # Send email notification to superadmin
+    try:
+        from accounts.mail_service import send_custom_email
+        phone = profile.payment_phone if profile else "N/A"
+        full_name = profile.payment_full_name if profile else "N/A"
+        location = profile.payment_location if profile else "N/A"
+        
+        subject = f"[Gaboom Central] Demande de retrait affilié (API) - {request.user.username}"
+        body = (
+            f"Bonjour,\n\n"
+            f"Une nouvelle demande de retrait a été soumise par un affilié via l'API :\n"
+            f"- Affilié : {request.user.username} (Email : {request.user.email or 'N/A'})\n"
+            f"- Montant : {amount} GDS\n"
+            f"- Méthode de paiement : {payment_method}\n"
+            f"- Téléphone de paiement : {phone}\n"
+            f"- Nom complet du destinataire : {full_name}\n"
+            f"- Localisation : {location}\n\n"
+            f"Veuillez traiter cette demande depuis le panneau d'administration.\n\n"
+            f"Cordialement,\n"
+            f"L'équipe Gaboom Central"
+        )
+        send_custom_email(
+            subject=subject,
+            body=body,
+            to_emails="stanleygabriel73@gmail.com"
+        )
+    except Exception as email_err:
+        import logging
+        logging.getLogger(__name__).error(f"Failed to send API withdrawal email to superadmin: {str(email_err)}")
 
     return _json_success({"withdrawal_id": wr.pk, "status": wr.status})
 

@@ -326,29 +326,67 @@ def superadmin_dashboard(request: HttpRequest):
         messages.error(request, "Accès réservé au superadmin")
         return redirect("/admin/")
 
+    from accounts.models import Subscription, GlobalPaymentSettings
+    from decimal import Decimal
+    from django.db.models import Sum, Count, Q
+    from agent_portal.models import Ticket, TicketStatus
+
+    config, _ = GlobalPaymentSettings.objects.get_or_create(id=1)
+    now = timezone.now()
+
     total_borlettes = Borlette.objects.count()
     total_active_admins = User.objects.filter(role=UserRole.ADMIN, is_active=True).count()
     total_suspended_admins = User.objects.filter(role=UserRole.ADMIN, is_active=False).count()
     total_agents = Agent.objects.count()
     total_tx = FinancialTransaction.objects.count()
-    
-    from django.db.models import Sum, Count, Q
-    total_revenue = FinancialTransaction.objects.aggregate(total=Sum('total_amount'))['total'] or 0
 
-    from agent_portal.models import Ticket, TicketStatus
-    borlettes = Borlette.objects.select_related('user').annotate(
+    # Période de filtrage pour les profits
+    period = request.GET.get("period", "all")  # all, month, year
+    tx_filter = FinancialTransaction.objects.filter(type="subscription")
+
+    if config.accumulated_profit_reset_date:
+        tx_filter = tx_filter.filter(created_at__gte=config.accumulated_profit_reset_date)
+
+    if period == "month":
+        tx_filter = tx_filter.filter(created_at__year=now.year, created_at__month=now.month)
+    elif period == "year":
+        tx_filter = tx_filter.filter(created_at__year=now.year)
+
+    total_paid_revenue = tx_filter.aggregate(total=Sum('total_amount'))['total'] or Decimal("0.00")
+
+    borlettes_qs = Borlette.objects.select_related('user').annotate(
         num_agents=Count('agents')
     ).order_by('nom_borlette')
 
-    for b in borlettes:
-        b.ca = Ticket.objects.filter(borlette=b, statut=TicketStatus.VALIDE).aggregate(total=Sum('total_mise'))['total'] or 0
-
     search_query = request.GET.get('q', '').strip()
     if search_query:
-        borlettes = borlettes.filter(
+        borlettes_qs = borlettes_qs.filter(
             Q(nom_borlette__icontains=search_query) |
             Q(user__username__icontains=search_query)
         )
+
+    borlettes = list(borlettes_qs)
+    total_amount_due = Decimal("0.00")
+
+    for b in borlettes:
+        b.ca = Ticket.objects.filter(borlette=b, statut=TicketStatus.VALIDE).aggregate(total=Sum('total_mise'))['total'] or 0
+        b.active_sub = Subscription.objects.filter(borlette=b).order_by('-end_date').first()
+        
+        # Calculate amount due for this admin
+        if b.is_vip and b.vip_lifetime_free:
+            b.amount_due = Decimal("0.00")
+            b.is_lifetime = True
+        else:
+            b.amount_due = Decimal(str(max(b.num_agents, 1) * 1250))
+            b.is_lifetime = False
+            total_amount_due += b.amount_due
+
+        if b.active_sub:
+            b.days_remaining = (b.active_sub.end_date - now.date()).days
+            b.expiration_date = b.active_sub.end_date
+        else:
+            b.days_remaining = None
+            b.expiration_date = None
 
     return render(
         request,
@@ -359,11 +397,113 @@ def superadmin_dashboard(request: HttpRequest):
             "total_suspended_admins": total_suspended_admins,
             "total_agents": total_agents,
             "total_tx": total_tx,
-            "total_revenue": total_revenue,
+            "total_revenue": total_paid_revenue,
+            "total_amount_due": total_amount_due,
+            "period": period,
+            "accumulated_profit_reset_date": config.accumulated_profit_reset_date,
             "borlettes": borlettes,
             "search_query": search_query,
         },
     )
+
+
+@login_required
+def superadmin_delete_borlette(request: HttpRequest, borlette_id: int):
+    """Supprime une borlette (loterie) et toutes ses dépendances avec confirmation."""
+    if not request.user.is_superuser:
+        messages.error(request, "Accès réservé au superadmin")
+        return redirect("/admin/")
+
+    if request.method != "POST":
+        messages.error(request, "Action non autorisée")
+        return redirect("superadmin_dashboard")
+
+    from django.db import transaction
+    borlette = get_object_or_404(Borlette, id=borlette_id)
+    nom_borlette = borlette.nom_borlette
+    user = borlette.user
+
+    with transaction.atomic():
+        Agent.objects.filter(borlette=borlette).delete()
+        borlette.delete()
+        if user:
+            user.delete()
+
+    messages.success(request, f"La loterie '{nom_borlette}' et l'administrateur associé ont été supprimés avec succès.")
+    return redirect("superadmin_dashboard")
+
+
+@login_required
+def superadmin_reset_profit_counter(request: HttpRequest):
+    """Réinitialise le montant des profits accumulés."""
+    if not request.user.is_superuser:
+        messages.error(request, "Accès réservé au superadmin")
+        return redirect("/admin/")
+
+    if request.method != "POST":
+        return redirect("superadmin_dashboard")
+
+    from accounts.models import GlobalPaymentSettings
+    config, _ = GlobalPaymentSettings.objects.get_or_create(id=1)
+    config.accumulated_profit_reset_date = timezone.now()
+    config.save(update_fields=["accumulated_profit_reset_date"])
+
+    messages.success(request, "Le compteur de profits accumulés a été réinitialisé à zéro avec succès.")
+    return redirect("superadmin_dashboard")
+
+
+@login_required
+def superadmin_toggle_borlette_vip(request: HttpRequest, borlette_id: int):
+    """Ajoute ou retire un admin du groupe VIP."""
+    if not request.user.is_superuser:
+        messages.error(request, "Accès réservé au superadmin")
+        return redirect("/admin/")
+
+    borlette = get_object_or_404(Borlette, id=borlette_id)
+    borlette.is_vip = not borlette.is_vip
+    
+    if not borlette.is_vip:
+        borlette.vip_lifetime_free = False
+
+    borlette.save(update_fields=["is_vip", "vip_lifetime_free"])
+
+    if borlette.is_vip:
+        from accounts.models import Subscription
+        sub = Subscription.objects.filter(borlette=borlette).order_by('-end_date').first()
+        if sub and sub.end_date < timezone.now().date():
+            sub.end_date = timezone.now().date() + timezone.timedelta(days=30)
+            sub.is_active = True
+            sub.save(update_fields=["end_date", "is_active"])
+
+    status_str = "ajouté au groupe VIP (compte non bloqué)" if borlette.is_vip else "retiré du groupe VIP"
+    messages.success(request, f"L'administrateur '{borlette.user.username}' ({borlette.nom_borlette}) a été {status_str}.")
+    return redirect("superadmin_dashboard")
+
+
+@login_required
+def superadmin_toggle_borlette_lifetime(request: HttpRequest, borlette_id: int):
+    """Ajoute ou retire un admin de la liste 'Ne jamais payer' (Abonnement à vie)."""
+    if not request.user.is_superuser:
+        messages.error(request, "Accès réservé au superadmin")
+        return redirect("/admin/")
+
+    borlette = get_object_or_404(Borlette, id=borlette_id)
+    borlette.vip_lifetime_free = not borlette.vip_lifetime_free
+
+    if borlette.vip_lifetime_free:
+        borlette.is_vip = True
+        from accounts.models import Subscription
+        sub = Subscription.objects.filter(borlette=borlette).order_by('-end_date').first()
+        if sub:
+            sub.end_date = timezone.now().date() + timezone.timedelta(days=3650)
+            sub.is_active = True
+            sub.save(update_fields=["end_date", "is_active"])
+
+    borlette.save(update_fields=["is_vip", "vip_lifetime_free"])
+
+    status_str = "placé sur la liste 'Ne jamais payer' (Abonnement à vie)" if borlette.vip_lifetime_free else "retiré de la liste 'Ne jamais payer'"
+    messages.success(request, f"L'administrateur '{borlette.user.username}' ({borlette.nom_borlette}) a été {status_str}.")
+    return redirect("superadmin_dashboard")
 
 
 @login_required

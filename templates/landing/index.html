@@ -322,105 +322,111 @@
             </p>
         </div>
 
-        {% if draw_results %}
-            <!-- Dropdown Selector (saves space on mobile and keeps UI clean) -->
-            <div class="max-w-xs mx-auto mb-8">
-                <label for="draw-selector" class="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2 text-center">Sélectionnez un tirage</label>
-                <div class="relative">
-                    <select id="draw-selector" onchange="switchDrawTab(this.value)" class="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 appearance-none cursor-pointer pr-10">
-                        {% for item in draw_results %}
-                            {% if item.has_results %}
-                                <option value="draw-{{ item.tirage.id }}" class="text-black bg-white" style="color: black;">{{ item.tirage.nom }}</option>
-                            {% endif %}
-                        {% endfor %}
-                    </select>
-                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-zinc-400">
-                        <i data-lucide="chevron-down" class="h-4 w-4"></i>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Tabs Content -->
-            <div class="max-w-4xl mx-auto">
-                {% for item in draw_results %}
-                    {% if item.has_results %}
-                        <div id="draw-{{ item.tirage.id }}" class="draw-tab-content space-y-6 {% if not forloop.first %}hidden{% endif %}">
-                            <!-- Most Recent Result Card -->
-                            {% with latest=item.results.0 %}
-                            <div class="card border-orange-500/30 bg-gradient-to-r from-orange-500/10 to-transparent">
-                                <div class="text-center md:text-left md:flex justify-between items-center">
-                                    <div>
-                                        <span class="text-[10px] text-orange-400 uppercase tracking-widest font-black">Dernier Résultat • {{ latest.date|date:"d/m/Y" }}</span>
-                                        <h3 class="text-2xl font-black text-white mt-1">{{ item.tirage.nom }}</h3>
-                                    </div>
-                                    <div class="flex flex-wrap justify-center gap-4 mt-4 md:mt-0">
-                                        <div class="flex items-center gap-2">
-                                            <div class="w-12 h-12 bg-white/10 border border-white/10 rounded-full flex items-center justify-center text-xl font-black text-white shadow-lg shadow-black/20">{{ latest.lot1 }}</div>
-                                            <div class="w-12 h-12 bg-white/10 border border-white/10 rounded-full flex items-center justify-center text-xl font-black text-white shadow-lg shadow-black/20">{{ latest.lot2 }}</div>
-                                            <div class="w-12 h-12 bg-white/10 border border-white/10 rounded-full flex items-center justify-center text-xl font-black text-white shadow-lg shadow-black/20">{{ latest.lot3 }}</div>
-                                        </div>
-                                        <div class="flex items-center gap-2 border-l border-white/10 pl-4">
+        {% if latest_results %}
+            <div class="max-w-5xl mx-auto overflow-hidden rounded-3xl border border-white/10 bg-black/40 backdrop-blur-xl shadow-2xl">
+                <!-- Desktop Modern Table -->
+                <div class="hidden md:block overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-white/10 bg-white/5 text-xs uppercase tracking-widest text-zinc-400 font-bold">
+                                <th class="py-4 px-6">Tirage</th>
+                                <th class="py-4 px-6">Date</th>
+                                <th class="py-4 px-6 text-center">Combinaison Gagnante</th>
+                                <th class="py-4 px-6 text-center">Loto 3</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/5">
+                            {% for res in latest_results %}
+                                <tr class="hover:bg-white/[0.04] transition-colors">
+                                    <td class="py-5 px-6">
+                                        <div class="flex items-center gap-3">
+                                            <div class="w-9 h-9 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20 font-black text-xs">
+                                                {{ res.tirage.nom|slice:":2"|upper }}
+                                            </div>
                                             <div>
-                                                <div class="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Loto 3</div>
-                                                <div class="text-lg font-black text-orange-400">{{ latest.loto3 }}</div>
+                                                <div class="font-black text-white text-base">{{ res.tirage.nom }}</div>
+                                                <div class="text-[11px] text-zinc-400 font-mono">{{ res.tirage.type|upper }}</div>
                                             </div>
                                         </div>
-                                    </div>
+                                    </td>
+                                    <td class="py-5 px-6 font-medium text-sm text-zinc-300">
+                                        {{ res.date|date:"d M Y" }}
+                                    </td>
+                                    <td class="py-5 px-6">
+                                        <div class="flex items-center justify-center gap-3">
+                                            <div class="flex flex-col items-center">
+                                                <span class="w-11 h-11 rounded-full bg-gradient-to-b from-amber-400 to-orange-500 text-slate-950 font-black text-lg flex items-center justify-center shadow-lg shadow-orange-500/20 ring-2 ring-amber-300/40">
+                                                    {{ res.lot1 }}
+                                                </span>
+                                                <span class="text-[10px] text-amber-400 font-bold mt-1">1er Lot</span>
+                                            </div>
+                                            <div class="flex flex-col items-center">
+                                                <span class="w-11 h-11 rounded-full bg-white/10 border border-white/15 text-white font-black text-lg flex items-center justify-center shadow-md">
+                                                    {{ res.lot2 }}
+                                                </span>
+                                                <span class="text-[10px] text-zinc-400 font-bold mt-1">2ème</span>
+                                            </div>
+                                            <div class="flex flex-col items-center">
+                                                <span class="w-11 h-11 rounded-full bg-white/10 border border-white/15 text-white font-black text-lg flex items-center justify-center shadow-md">
+                                                    {{ res.lot3 }}
+                                                </span>
+                                                <span class="text-[10px] text-zinc-400 font-bold mt-1">3ème</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-5 px-6 text-center">
+                                        <span class="inline-flex items-center px-3.5 py-1.5 rounded-xl bg-orange-500/15 border border-orange-500/30 text-orange-400 font-black text-base shadow-sm">
+                                            {{ res.loto3 }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Mobile Responsive Cards -->
+                <div class="md:hidden divide-y divide-white/10">
+                    {% for res in latest_results %}
+                        <div class="p-5 space-y-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h4 class="font-black text-white text-lg">{{ res.tirage.nom }}</h4>
+                                    <span class="text-xs text-zinc-400">{{ res.date|date:"d M Y" }}</span>
+                                </div>
+                                <span class="px-3 py-1 rounded-xl bg-orange-500/15 text-orange-400 text-xs font-black border border-orange-500/30">
+                                    Loto 3 : {{ res.loto3 }}
+                                </span>
+                            </div>
+                            <div class="flex items-center justify-around pt-1">
+                                <div class="flex flex-col items-center">
+                                    <span class="w-12 h-12 rounded-full bg-gradient-to-b from-amber-400 to-orange-500 text-slate-950 font-black text-xl flex items-center justify-center shadow-lg shadow-orange-500/20">
+                                        {{ res.lot1 }}
+                                    </span>
+                                    <span class="text-[10px] text-amber-400 font-bold mt-1">1er Lot</span>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <span class="w-12 h-12 rounded-full bg-white/10 border border-white/15 text-white font-black text-xl flex items-center justify-center">
+                                        {{ res.lot2 }}
+                                    </span>
+                                    <span class="text-[10px] text-zinc-400 font-bold mt-1">2ème Lot</span>
+                                </div>
+                                <div class="flex flex-col items-center">
+                                    <span class="w-12 h-12 rounded-full bg-white/10 border border-white/15 text-white font-black text-xl flex items-center justify-center">
+                                        {{ res.lot3 }}
+                                    </span>
+                                    <span class="text-[10px] text-zinc-400 font-bold mt-1">3ème Lot</span>
                                 </div>
                             </div>
-                            {% endwith %}
-
-                            <!-- History Table -->
-                            <div class="card overflow-x-auto p-0 border-white/5 bg-black/20">
-                                <table class="w-full border-collapse text-left">
-                                    <thead>
-                                        <tr class="border-b border-white/10 bg-white/5">
-                                            <th class="p-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Date</th>
-                                            <th class="p-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">1er Lot</th>
-                                            <th class="p-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">2ème Lot</th>
-                                            <th class="p-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">3ème Lot</th>
-                                            <th class="p-4 text-xs font-bold text-zinc-400 uppercase tracking-wider">Loto 3</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-white/5">
-                                        {% for res in item.results %}
-                                            <tr class="hover:bg-white/5 transition-colors">
-                                                <td class="p-4 text-sm font-medium text-white">{{ res.date|date:"d/m/Y" }}</td>
-                                                <td class="p-4 text-sm font-bold text-emerald-400">{{ res.lot1 }}</td>
-                                                <td class="p-4 text-sm font-bold text-zinc-300">{{ res.lot2 }}</td>
-                                                <td class="p-4 text-sm font-bold text-zinc-300">{{ res.lot3 }}</td>
-                                                <td class="p-4 text-sm font-bold text-orange-400">{{ res.loto3 }}</td>
-                                            </tr>
-                                        {% endfor %}
-                                    </tbody>
-                                </table>
-                            </div>
                         </div>
-                    {% endif %}
-                {% endfor %}
+                    {% endfor %}
+                </div>
             </div>
         {% else %}
             <div class="text-center py-12 text-zinc-500">
                 Aucun résultat validé pour le moment.
             </div>
         {% endif %}
-    </div>
-</section>
-
-<script>
-    function switchDrawTab(tabId) {
-        // Hide all tab contents
-        document.querySelectorAll('.draw-tab-content').forEach(function(content) {
-            content.classList.add('hidden');
-        });
-        
-        // Show current tab content
-        var target = document.getElementById(tabId);
-        if (target) {
-            target.classList.remove('hidden');
-        }
-    }
-</script>
 
 <!-- STATS -->
 <section class="py-12 px-6">

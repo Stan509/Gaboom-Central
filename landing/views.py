@@ -6,23 +6,26 @@ from accounts.models import DocumentationVideo
 
 def index(request: HttpRequest):
     from accounts.models import Tirage, Resultat, TirageStatus
-    
-    active_tirages = Tirage.objects.filter(statut=TirageStatus.ACTIF).order_by('ordre_affichage', 'nom')
-    
-    draw_results = []
-    for tirage in active_tirages:
-        results = Resultat.objects.filter(
-            tirage=tirage
-        ).order_by("-date", "-created_at")[:10]
-        
-        draw_results.append({
-            "tirage": tirage,
-            "results": results,
-            "has_results": results.exists()
-        })
-        
+
+    all_recent_results = (
+        Resultat.objects.filter(tirage__statut=TirageStatus.ACTIF)
+        .select_related("tirage")
+        .order_by("-date", "-id")
+    )
+
+    seen_draw_names = set()
+    latest_three_results = []
+
+    for res in all_recent_results:
+        draw_key = res.tirage.nom.strip().lower()
+        if draw_key not in seen_draw_names:
+            seen_draw_names.add(draw_key)
+            latest_three_results.append(res)
+            if len(latest_three_results) >= 3:
+                break
+
     return render(request, "landing/index.html", {
-        "draw_results": draw_results
+        "latest_results": latest_three_results
     })
 
 

@@ -252,15 +252,39 @@
     </div>
   {% endif %}
 
-  <!-- State Banner -->
-  <div class="status-banner info">
-    <span style="font-size: 18px;">ℹ️</span>
-    <div>
-      <strong>Note sur l'abonnement :</strong> Votre abonnement actuel expire le 
-      <strong>{{ subscription.end_date|date:"d/m/Y" }}</strong>. 
-      Vous pouvez le prolonger à tout moment. Les jours payés s'ajoutent à votre date d'expiration actuelle.
+  {% if vip_lifetime_free %}
+    <!-- Bannière VIP Abonnement à vie -->
+    <div class="glass-card" style="border: 2px solid #a855f7; background: linear-gradient(135deg, rgba(168, 85, 247, 0.2), rgba(88, 28, 135, 0.3)); text-align: center; padding: 60px 24px; border-radius: 24px;">
+      <div style="font-size: 56px; margin-bottom: 16px;">♾️</div>
+      <h2 style="justify-content: center; font-size: 26px; font-weight: 800; color: #e9d5ff; border: none; margin-bottom: 10px;">Abonnement à Vie</h2>
+      <p style="font-size: 16px; color: rgba(255,255,255,0.85); max-width: 650px; margin: 0 auto 20px; line-height: 1.6;">
+        Votre borlette bénéficie du privilège <strong>Abonnement à vie</strong>. Votre accès est permanent et votre compte ne sera jamais bloqué. Aucun paiement n'est requis.
+      </p>
+      <div style="display: inline-flex; align-items: center; gap: 8px; padding: 8px 20px; border-radius: 9999px; background: rgba(168, 85, 247, 0.3); border: 1px solid #c084fc; font-weight: 700; color: #f3e8ff; font-size: 13px;">
+        ✨ Statut Actif Permanent • Aucun bouton de paiement nécessaire
+      </div>
     </div>
-  </div>
+  {% else %}
+    {% if is_vip %}
+      <!-- Bannière VIP avec dette autorisée -->
+      <div class="status-banner" style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; margin-bottom: 20px; padding: 18px; border-radius: 16px; display: flex; align-items: flex-start; gap: 14px;">
+        <span style="font-size: 24px;">⭐</span>
+        <div>
+          <strong style="font-size: 15px;">Privilège VIP Actif :</strong><br/>
+          Vous obtenez le privilège de ne jamais voir votre compte bloqué si vous n'avez pas encore payé le mois.
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- State Banner -->
+    <div class="status-banner info">
+      <span style="font-size: 18px;">ℹ️</span>
+      <div>
+        <strong>Note sur l'abonnement :</strong> Votre abonnement actuel expire le 
+        <strong>{{ subscription.end_date|date:"d/m/Y" }}</strong>. 
+        Vous pouvez le prolonger à tout moment. Les jours payés s'ajoutent à votre date d'expiration actuelle.
+      </div>
+    </div>
 
   {% if has_promo_discount %}
   <div class="status-banner {% if is_within_6_months %}info{% else %}warning{% endif %}" style="margin-top: -12px;">
@@ -441,6 +465,7 @@
       </div>
     </div>
   </div>
+  {% endif %}
 </div>
 
 <script>

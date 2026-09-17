@@ -17,6 +17,7 @@ class UserRole(models.TextChoices):
     AGENT = "AGENT", "Agent"
     AFFILIATE = "AFFILIATE", "Affiliate"
     PARTNER = "PARTNER", "Partenaire"
+    SOUS_DIRECTEUR = "SOUS_DIRECTEUR", "Sous-Directeur"
 
 
 class User(AbstractUser):
@@ -145,6 +146,15 @@ class Borlette(models.Model):
         decimal_places=2,
         default=0,
         help_text="Montant fixe du mariage gratuit en Gourdes"
+    )
+
+    is_vip = models.BooleanField(
+        default=False,
+        help_text="Admin VIP : compte jamais bloqué, abonnement prolongé automatiquement"
+    )
+    vip_lifetime_free = models.BooleanField(
+        default=False,
+        help_text="VIP Abonnement à vie : exempté de paiement sans bouton de paiement"
     )
 
     def __str__(self) -> str:
@@ -320,6 +330,31 @@ class WithdrawalRequest(models.Model):
         return f"{self.user.username} {self.amount} {self.status}"
 
 
+class SousDirecteur(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="sous_directeur_profile")
+    borlette = models.ForeignKey(Borlette, on_delete=models.CASCADE, related_name="sous_directeurs")
+    nom = models.CharField(max_length=150)
+    telephone = models.CharField(max_length=50, blank=True)
+    zone = models.CharField(max_length=120, blank=True)
+    commission_percent = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal("14.00"),
+        help_text="Pourcentage attribué par le directeur (ex: 14.00%)"
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Sous-Directeur"
+        verbose_name_plural = "Sous-Directeurs"
+
+    def __str__(self) -> str:
+        return f"{self.nom} ({self.borlette.nom_borlette})"
+
+
 class AgentStatus(models.TextChoices):
     ACTIF = "ACTIF", "Actif"
     SUSPENDU = "SUSPENDU", "Suspendu"
@@ -328,6 +363,14 @@ class AgentStatus(models.TextChoices):
 class Agent(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="agent")
     borlette = models.ForeignKey(Borlette, on_delete=models.CASCADE, related_name="agents")
+    sous_directeur = models.ForeignKey(
+        SousDirecteur,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="agents",
+        help_text="Sous-directeur responsable de cet agent"
+    )
 
     nom = models.CharField(max_length=150)
     telephone = models.CharField(max_length=50)
@@ -1323,11 +1366,21 @@ class Subscription(models.Model):
             return timezone.now().date() > self.end_date
         return False
     
+    def calculate_amount_due(self) -> Decimal:
+        """Calcule le montant dû en fonction des agents actifs de la borlette."""
+        if getattr(self.borlette, "is_vip", False) and getattr(self.borlette, "vip_lifetime_free", False):
+            return Decimal("0.00")
+        agent_count = self.borlette.agents.filter(statut="ACTIF").count()
+        return Decimal(str(max(agent_count, 1) * 1250))
+
     def get_subscription_status(self):
         """Retourne le statut de l'abonnement."""
         from django.utils import timezone
         today = timezone.now().date()
         
+        if getattr(self.borlette, "is_vip", False) and getattr(self.borlette, "vip_lifetime_free", False):
+            return "lifetime"
+
         # Si essai gratuit et a dépassé 30 jours, on passe à mensuel
         if self.subscription_type == SubscriptionType.TRIAL:
             if (today - self.start_date).days >= 30:
@@ -1341,6 +1394,8 @@ class Subscription(models.Model):
                 return "trial_expired"
             return "trial_active"
         if timezone.now().date() > self.end_date:
+            if getattr(self.borlette, "is_vip", False):
+                return "vip_grace"
             return "expired"
         return "active"
     updated_at = models.DateTimeField(auto_now=True)
@@ -1422,6 +1477,32 @@ class AdminTiragePreference(models.Model):
         return f"{self.user.username} · {self.tirage.nom} · {'Actif' if self.actif else 'Inactif'}"
 
 
+class SousDirecteurTiragePreference(models.Model):
+    """Préférences d'activation des tirages par sous-directeur.
+    
+    Un sous-directeur peut décider de ne pas vendre un tirage pour sa juridiction,
+    même si l'admin de la borlette le vend.
+    """
+    sous_directeur = models.ForeignKey(SousDirecteur, on_delete=models.CASCADE, related_name="tirage_preferences")
+    tirage = models.ForeignKey(Tirage, on_delete=models.CASCADE, related_name="sous_directeur_preferences")
+    actif = models.BooleanField(default=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["sous_directeur", "tirage"], name="uniq_sous_dir_tirage_pref"),
+        ]
+        indexes = [
+            models.Index(fields=["sous_directeur", "tirage"], name="idx_sd_tirage"),
+            models.Index(fields=["sous_directeur", "actif"], name="idx_sd_actif"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.sous_directeur.nom} · {self.tirage.nom} · {'Actif' if self.actif else 'Inactif'}"
+
+
 class RecoveryStatus(models.TextChoices):
     PENDING = "PENDING", "En attente"
     RESOLVED = "RESOLVED", "Résolu"
@@ -1472,6 +1553,12 @@ class GlobalPaymentSettings(models.Model):
     stripe_fee_fixed = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.30"))
     moncash_fee_percent = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("1.0"))
     moncash_fee_fixed = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0.0"))
+
+    accumulated_profit_reset_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Date de réinitialisation du montant des profits accumulés par le Superadmin"
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
 

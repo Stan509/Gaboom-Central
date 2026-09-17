@@ -18,7 +18,7 @@ def _get_smtp_connection_from_settings():
         timeout=10,
     )
 
-def send_custom_email(subject, body, to_emails, html_message=None):
+def send_custom_email(subject, body, to_emails, html_message=None, attachments=None):
     """
     Sends an email using database-configured SMTP settings (Namecheap, etc.)
     Falls back to environment-configured SMTP settings if no active SMTPSettings are found.
@@ -41,6 +41,9 @@ def send_custom_email(subject, body, to_emails, html_message=None):
             to=to_emails,
             connection=connection,
         )
+        if attachments:
+            for attachment in attachments:
+                email.attach(*attachment)
         if html_message:
             email.content_subtype = "html"
             email.body = html_message
@@ -74,6 +77,9 @@ def send_custom_email(subject, body, to_emails, html_message=None):
             to=to_emails,
             connection=connection,
         )
+        if attachments:
+            for attachment in attachments:
+                email.attach(*attachment)
         if html_message:
             email.content_subtype = "html"
             email.body = html_message
@@ -95,6 +101,9 @@ def send_custom_email(subject, body, to_emails, html_message=None):
                 to=to_emails,
                 connection=connection,
             )
+            if attachments:
+                for attachment in attachments:
+                    email.attach(*attachment)
             if html_message:
                 email.content_subtype = "html"
                 email.body = html_message

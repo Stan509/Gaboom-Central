@@ -28,10 +28,10 @@ PERIOD_RANGES = {
 
 
 def _require_admin_api(request: HttpRequest) -> JsonResponse | None:
-    """Vérifie que l'utilisateur est admin avec borlette."""
+    """Vérifie que l'utilisateur est admin ou sous-directeur avec borlette."""
     if not request.user.is_authenticated:
         return JsonResponse({"error": "Non authentifié"}, status=401)
-    if request.user.role != UserRole.ADMIN:
+    if request.user.role not in (UserRole.ADMIN, UserRole.SOUS_DIRECTEUR):
         return JsonResponse({"error": "Accès refusé"}, status=403)
     borlette = get_user_borlette(request.user)
     if not borlette:
@@ -385,7 +385,11 @@ def api_agent_location_history(request: HttpRequest, agent_id: int) -> JsonRespo
         return auth_err
 
     try:
-        agent = Agent.objects.get(id=agent_id, borlette=get_user_borlette(request.user))
+        borlette = get_user_borlette(request.user)
+        query_kwargs = {"id": agent_id, "borlette": borlette}
+        if request.user.role == UserRole.SOUS_DIRECTEUR:
+            query_kwargs["sous_directeur"] = request.user.sous_directeur_profile
+        agent = Agent.objects.get(**query_kwargs)
         
         from accounts.models import AgentLocationHistory
         from django.utils import timezone

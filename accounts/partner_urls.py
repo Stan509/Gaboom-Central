@@ -17,5 +17,6 @@ urlpatterns = [
     path("submit-result/<int:tirage_id>/", partner_views.partner_submit_result, name="submit_result"),
     path("confirm-withdrawal/<int:withdrawal_id>/", partner_views.partner_confirm_withdrawal, name="confirm_withdrawal"),
     path("renew-subscription/<int:subscription_id>/", partner_views.partner_renew_subscription, name="renew_subscription"),
+    path("manual-payment/<int:subscription_id>/", partner_views.partner_manual_payment, name="manual_payment"),
     path("toggle-affiliate/<int:user_id>/", partner_views.toggle_affiliate_status, name="toggle_affiliate"),
 ]

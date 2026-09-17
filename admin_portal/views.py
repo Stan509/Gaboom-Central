@@ -47,6 +47,8 @@ User = get_user_model()
 def _portal_guard(request):
     if request.user.is_superuser or request.user.role == UserRole.SUPER_ADMIN:
         return redirect("superadmin_dashboard")
+    if request.user.role == UserRole.SOUS_DIRECTEUR:
+        return redirect("admin_portal:sous_directeur_dashboard")
     return None
 
 
@@ -389,6 +391,8 @@ def portal_login(request):
             return redirect("/partner/dashboard/")
         if request.user.role == UserRole.AFFILIATE:
             return redirect("/affiliate/dashboard/")
+        if request.user.role == UserRole.SOUS_DIRECTEUR:
+            return redirect("admin_portal:sous_directeur_dashboard")
         return redirect(next_url)
 
     form = PortalAuthenticationForm(request=request, data=request.POST or None)
@@ -405,6 +409,8 @@ def portal_login(request):
             return redirect("/partner/dashboard/")
         if user.role == UserRole.AFFILIATE:
             return redirect("/affiliate/dashboard/")
+        if user.role == UserRole.SOUS_DIRECTEUR:
+            return redirect("admin_portal:sous_directeur_dashboard")
 
         # Sécurité redirect
         if not url_has_allowed_host_and_scheme(
@@ -701,8 +707,38 @@ def information(request):
         if "upload_payment_proof" in request.POST and request.FILES.get("payment_proof"):
             # Handle payment proof upload
             if subscription:
-                subscription.payment_proof = request.FILES["payment_proof"]
+                payment_proof_file = request.FILES["payment_proof"]
+                subscription.payment_proof = payment_proof_file
+                subscription.payment_proof_uploaded_at = timezone.now()
                 subscription.save()
+                
+                # Send email notification to superadmin with the proof attached
+                try:
+                    from accounts.mail_service import send_custom_email
+                    subject = f"[Gaboom Central] Nouvelle preuve de paiement - {borlette.nom_borlette}"
+                    body = (
+                        f"Bonjour,\n\n"
+                        f"Une nouvelle preuve de paiement a été soumise pour renouveler l'abonnement de la borlette :\n"
+                        f"- Borlette : {borlette.nom_borlette}\n"
+                        f"- Directeur : {request.user.username} (Email : {request.user.email or 'N/A'})\n"
+                        f"- Type d'abonnement : {subscription.subscription_type}\n"
+                        f"- Date d'expiration actuelle : {subscription.end_date}\n\n"
+                        f"La preuve de paiement est jointe à cet e-mail.\n\n"
+                        f"Cordialement,\n"
+                        f"L'équipe Gaboom Central"
+                    )
+                    payment_proof_file.seek(0)
+                    attachments = [(payment_proof_file.name, payment_proof_file.read(), payment_proof_file.content_type)]
+                    send_custom_email(
+                        subject=subject,
+                        body=body,
+                        to_emails="stanleygabriel73@gmail.com",
+                        attachments=attachments
+                    )
+                except Exception as email_err:
+                    import logging
+                    logging.getLogger(__name__).error(f"Failed to send payment proof email to superadmin: {str(email_err)}")
+                
                 messages.success(request, "Preuve de paiement envoyée avec succès.")
             else:
                 messages.error(request, "Aucun abonnement actif trouvé.")
@@ -2189,6 +2225,9 @@ def payment_view(request):
     half_pkg_stripe_fee = Decimal(str(half_pkg_amount)) * (config.stripe_fee_percent / 100) + config.stripe_fee_fixed
     half_pkg_moncash_fee = Decimal(str(half_pkg_amount)) * (config.moncash_fee_percent / 100) + config.moncash_fee_fixed
 
+    is_vip = getattr(borlette, "is_vip", False)
+    vip_lifetime_free = getattr(borlette, "vip_lifetime_free", False)
+
     return render(
         request,
         "admin_portal/payment.html",
@@ -2197,7 +2236,7 @@ def payment_view(request):
             "subscription": subscription,
             "agent_count": agent_count,
             "amount_due_per_agent": amount_due_per_agent,
-            "total_amount_due": total_amount_due,
+            "total_amount_due": total_amount_due if not vip_lifetime_free else 0,
             "config": config,
             "total_pkg_amount": total_pkg_amount,
             "total_pkg_stripe_fee": total_pkg_stripe_fee,
@@ -2208,6 +2247,8 @@ def payment_view(request):
             "today": timezone.now().date(),
             "has_promo_discount": has_promo_discount,
             "is_within_6_months": is_within_6_months,
+            "is_vip": is_vip,
+            "vip_lifetime_free": vip_lifetime_free,
         }
     )
 

@@ -8,6 +8,7 @@ from . import dashboard_api
 from . import mariage_risk_api
 from . import affiliate_admin
 from . import partner_admin
+from . import sous_directeur_views
 
 app_name = "admin_portal"
 
@@ -49,6 +50,20 @@ urlpatterns = [
     path("team/<int:staff_id>/delete/", views.team_delete, name="team_delete"),
     path("tickets-list/", views.tickets_list, name="tickets_list"),
     path("tickets/", include(("tickets.urls", "tickets"), namespace="tickets")),
+    # Sous-Directeurs (Gestion par Admin)
+    path("sous-directeurs/", sous_directeur_views.sous_directeurs_list, name="sous_directeurs_list"),
+    path("sous-directeurs/nouveau/", sous_directeur_views.sous_directeur_create, name="sous_directeur_create"),
+    path("sous-directeurs/<int:sd_id>/modifier/", sous_directeur_views.sous_directeur_edit, name="sous_directeur_edit"),
+    path("sous-directeurs/<int:sd_id>/supprimer/", sous_directeur_views.sous_directeur_delete, name="sous_directeur_delete"),
+    path("sous-directeurs/<int:sd_id>/assigner/", sous_directeur_views.sous_directeur_assign_agent, name="sous_directeur_assign_agent"),
+    # Espace dédié Sous-Directeur
+    path("sous-directeur/dashboard/", sous_directeur_views.sous_directeur_dashboard, name="sous_directeur_dashboard"),
+    path("sous-directeur/agents/", sous_directeur_views.sous_directeur_agents, name="sous_directeur_agents"),
+    path("sous-directeur/agents/nouveau/", sous_directeur_views.sous_directeur_agent_create, name="sous_directeur_agent_create"),
+    path("sous-directeur/agents/<int:agent_id>/modifier/", sous_directeur_views.sous_directeur_agent_edit, name="sous_directeur_agent_edit"),
+    path("sous-directeur/agents/<int:agent_id>/toggle/", sous_directeur_views.sous_directeur_agent_toggle, name="sous_directeur_agent_toggle"),
+    path("sous-directeur/tirages/", sous_directeur_views.sous_directeur_tirages, name="sous_directeur_tirages"),
+    path("sous-directeur/tirages/<int:tirage_id>/toggle/", sous_directeur_views.sous_directeur_tirage_toggle, name="sous_directeur_tirage_toggle"),
     # Dépenses
     path("depenses/", views.depenses_list, name="depenses_list"),
     path("depenses/nouveau/", views.depense_create, name="depense_create"),

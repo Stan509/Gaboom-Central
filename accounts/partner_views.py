@@ -76,6 +76,12 @@ def partner_dashboard(request: HttpRequest):
             sub.hours_remaining = None
             sub.is_trial = False
             
+        sub.agent_count = sub.borlette.agents.filter(statut="ACTIF").count()
+        sub.amount_due = sub.calculate_amount_due()
+        sub.phone = sub.borlette.telephone
+        sub.is_vip = getattr(sub.borlette, "is_vip", False)
+        sub.vip_lifetime_free = getattr(sub.borlette, "vip_lifetime_free", False)
+
         if sub.days_remaining <= 0:
             sub.status_color = 'red'
             sub.status_label = 'Expiré'
@@ -250,6 +256,57 @@ def partner_renew_subscription(request: HttpRequest, subscription_id: int):
     return render(request, "accounts/partner_renew_subscription.html", {
         "subscription": subscription,
     })
+
+
+@login_required
+@require_POST
+def partner_manual_payment(request: HttpRequest, subscription_id: int):
+    """Paiement manuel direct sans preuve de paiement par le partenaire."""
+    if request.user.role != UserRole.PARTNER and not request.user.is_superuser:
+        return redirect("/portal/login/")
+
+    from accounts.models import FinancialTransaction, FinancialTransactionType
+    from datetime import timedelta
+    from decimal import Decimal
+
+    subscription = get_object_or_404(Subscription, id=subscription_id)
+    borlette = subscription.borlette
+
+    if request.user.role == UserRole.PARTNER:
+        partner_profile = getattr(request.user, "partner_profile", None)
+        if partner_profile and partner_profile.allowed_borlettes.exists():
+            if borlette not in partner_profile.allowed_borlettes.all():
+                messages.error(request, "Vous n'avez pas l'autorisation pour cette borlette.")
+                return redirect("partner:dashboard")
+
+    months = int(request.POST.get("months", 1))
+    days_to_add = months * 30
+    today = timezone.now().date()
+
+    if subscription.end_date < today:
+        subscription.end_date = today + timedelta(days=days_to_add)
+    else:
+        subscription.end_date = subscription.end_date + timedelta(days=days_to_add)
+
+    subscription.is_active = True
+    subscription.save(update_fields=["end_date", "is_active", "updated_at"])
+
+    # Enregistrer la transaction financière
+    amount_due = subscription.calculate_amount_due() * months
+    if amount_due > 0:
+        FinancialTransaction.objects.create(
+            borlette=borlette,
+            type=FinancialTransactionType.SUBSCRIPTION,
+            total_amount=amount_due,
+            months_active=months,
+            agents_count=borlette.agents.filter(statut="ACTIF").count(),
+        )
+
+    messages.success(
+        request,
+        f"Paiement manuel validé pour '{borlette.nom_borlette}'. Abonnement prolongé jusqu'au {subscription.end_date.strftime('%d/%m/%Y')} (+{amount_due} GDS comptabilisés)."
+    )
+    return redirect("partner:dashboard")
 
 
 @login_required

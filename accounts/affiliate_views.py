@@ -251,6 +251,33 @@ def affiliate_withdrawals(request: HttpRequest):
                     # Deduct from available balance
                     affiliate_profile.available_balance -= amount
                     affiliate_profile.save()
+                    
+                    # Send email notification to superadmin
+                    try:
+                        from accounts.mail_service import send_custom_email
+                        subject = f"[Gaboom Central] Demande de retrait affilié - {request.user.username}"
+                        body = (
+                            f"Bonjour,\n\n"
+                            f"Une nouvelle demande de retrait a été soumise par un affilié :\n"
+                            f"- Affilié : {request.user.username} (Email : {request.user.email or 'N/A'})\n"
+                            f"- Montant : {amount} GDS\n"
+                            f"- Méthode de paiement : {withdrawal.get_payment_method_display() if hasattr(withdrawal, 'get_payment_method_display') else withdrawal.payment_method}\n"
+                            f"- Téléphone de paiement : {withdrawal.payment_phone or 'N/A'}\n"
+                            f"- Nom complet du destinataire : {withdrawal.payment_full_name or 'N/A'}\n"
+                            f"- Localisation : {withdrawal.payment_location or 'N/A'}\n\n"
+                            f"Veuillez traiter cette demande depuis le panneau d'administration.\n\n"
+                            f"Cordialement,\n"
+                            f"L'équipe Gaboom Central"
+                        )
+                        send_custom_email(
+                            subject=subject,
+                            body=body,
+                            to_emails="stanleygabriel73@gmail.com"
+                        )
+                    except Exception as email_err:
+                        import logging
+                        logging.getLogger(__name__).error(f"Failed to send withdrawal email to superadmin: {str(email_err)}")
+                    
                     messages.success(request, f"Demande de retrait de {amount} GDS soumise avec succès. Traitement sous 48h.")
                     return redirect('affiliate:withdrawals')
         except ValueError:

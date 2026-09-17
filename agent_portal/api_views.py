@@ -495,7 +495,7 @@ def api_tirages_actifs(request: HttpRequest) -> JsonResponse:
     if not agent:
         return _json_error("Non autorisé", 401)
 
-    from accounts.models import AdminTiragePreference
+    from accounts.models import AdminTiragePreference, SousDirecteurTiragePreference
 
     # Récupérer l'admin de la borlette
     admin_user = agent.borlette.user
@@ -507,6 +507,16 @@ def api_tirages_actifs(request: HttpRequest) -> JsonResponse:
             actif=False
         ).values_list('tirage_id', flat=True)
     )
+
+    # Récupérer les tirages désactivés par le sous-directeur de l'agent si applicable
+    if agent.sous_directeur_id:
+        sd_disabled = set(
+            SousDirecteurTiragePreference.objects.filter(
+                sous_directeur_id=agent.sous_directeur_id,
+                actif=False
+            ).values_list('tirage_id', flat=True)
+        )
+        disabled_tirage_ids.update(sd_disabled)
 
     tirages = Tirage.objects.filter(
         borlette=agent.borlette,

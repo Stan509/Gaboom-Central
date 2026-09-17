@@ -1,0 +1,316 @@
+{% extends "admin_portal/_page_shell.html" %}
+
+{% block title %}Sous-Directeurs | Gaboom{% endblock %}
+
+{% block page_title %}
+  Sous-Directeurs
+{% endblock %}
+
+{% block page_meta %}
+  <div class="text-xs text-slate-700 dark:text-slate-200">
+    Gestion des sous-directeurs, juridictions et commissions de marge
+  </div>
+{% endblock %}
+
+{% block page_body %}
+  <div class="pb-24 space-y-8 max-w-7xl mx-auto">
+
+    {% if messages %}
+      <div class="space-y-2">
+        {% for message in messages %}
+          <div class="rounded-2xl border border-white/10 bg-white/20 dark:bg-white/10 backdrop-blur-xl px-4 py-3 text-sm text-slate-900 dark:text-white flex items-center gap-2">
+            <svg class="w-5 h-5 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span>{{ message }}</span>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    <!-- Top Grid: Formulaire création + Assignation rapide -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- Formulaire Nouveau Sous-Directeur -->
+      <div class="lg:col-span-2 rounded-3xl border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-900/60 backdrop-blur-xl p-6 shadow-sm">
+        <div class="flex items-center gap-3 mb-5">
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
+          </div>
+          <div>
+            <h2 class="text-base font-semibold text-slate-900 dark:text-white">Créer un Sous-Directeur</h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400">Déléguez une zone ou un groupe d'agents avec une commission globale.</p>
+          </div>
+        </div>
+
+        <form method="post" action="{% url 'admin_portal:sous_directeur_create' %}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {% csrf_token %}
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nom complet *</label>
+            <input type="text" name="nom" required placeholder="Ex: Jean Baptiste" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Zone / Ville / Juridiction</label>
+            <input type="text" name="zone" placeholder="Ex: Port-au-Prince Centre" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Identifiant de connexion (Username) *</label>
+            <input type="text" name="username" required placeholder="Ex: sd_jean" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Mot de passe *</label>
+            <input type="password" name="password" required placeholder="••••••••" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Téléphone</label>
+            <input type="text" name="telephone" placeholder="Ex: +509 3700-0000" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Taux de Commission Sous-Directeur (%) *</label>
+            <div class="relative">
+              <input type="number" step="0.01" min="0" max="100" name="commission_percent" value="14.00" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none pr-8" />
+              <span class="absolute right-3 top-2.5 text-xs text-slate-400 font-bold">%</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1">Ex: s'il a 14% et qu'il accorde 10% à son agent, il empoche 4% de marge.</p>
+          </div>
+
+          <div class="md:col-span-2 pt-2">
+            <button type="submit" class="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-sm shadow-md shadow-blue-500/20 transition duration-150 flex items-center justify-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              Enregistrer le Sous-Directeur
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Assignation d'un agent existant -->
+      <div class="rounded-3xl border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-900/60 backdrop-blur-xl p-6 shadow-sm flex flex-col justify-between">
+        <div>
+          <div class="flex items-center gap-3 mb-4">
+            <div class="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-white shadow-md shadow-orange-500/20">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            </div>
+            <div>
+              <h2 class="text-base font-semibold text-slate-900 dark:text-white">Assigner un Agent</h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Rattacher un agent sans sous-directeur</p>
+            </div>
+          </div>
+
+          {% if unassigned_agents %}
+            <form id="assignAgentForm" method="post" action="" class="space-y-4">
+              {% csrf_token %}
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Choisir le Sous-Directeur</label>
+                <select id="assignSdSelect" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" required>
+                  <option value="">Sélectionner un sous-directeur</option>
+                  {% for s in sous_directeurs %}
+                    <option value="{{ s.id }}">{{ s.nom }} ({{ s.commission_percent }}%)</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Choisir l'Agent libre</label>
+                <select name="agent_id" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none" required>
+                  {% for a in unassigned_agents %}
+                    <option value="{{ a.id }}">{{ a.nom }} ({{ a.user.username }}) - Comm: {{ a.commission }}%</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <button type="submit" onclick="submitAssign(event)" class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-medium text-sm shadow-md shadow-amber-500/20 transition duration-150">
+                Transférer sous sa juridiction
+              </button>
+            </form>
+          {% else %}
+            <div class="rounded-2xl border border-dashed border-slate-200 dark:border-white/10 p-6 text-center text-slate-500 dark:text-slate-400 text-xs">
+              Tous vos agents sont déjà sous la supervision d'un sous-directeur ou aucun agent libre n'est disponible.
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-slate-200/60 dark:border-white/5 text-[11px] text-slate-400">
+          Les sous-directeurs disposent de leur propre interface privée et ne peuvent jamais consulter les rapports globaux, les paramètres système ni modifier les résultats de tirage.
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Liste des Sous-Directeurs -->
+    <div class="rounded-3xl border border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-slate-900/60 backdrop-blur-xl p-6 shadow-sm space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-lg font-bold text-slate-900 dark:text-white">Vos Sous-Directeurs Actifs ({{ sous_directeurs|length }})</h2>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Gérez les plafonds de marge et le statut des comptes.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-500 dark:text-slate-400">
+              <th class="py-3 px-4">Sous-Directeur</th>
+              <th class="py-3 px-4">Zone</th>
+              <th class="py-3 px-4">Identifiant</th>
+              <th class="py-3 px-4">Téléphone</th>
+              <th class="py-3 px-4">Commission</th>
+              <th class="py-3 px-4">Agents</th>
+              <th class="py-3 px-4">Statut</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 dark:divide-white/5">
+            {% for s in sous_directeurs %}
+              <tr class="hover:bg-slate-50/50 dark:hover:bg-white/[0.02] transition">
+                <td class="py-3 px-4">
+                  <div class="font-semibold text-slate-900 dark:text-white">{{ s.nom }}</div>
+                  <div class="text-[11px] text-slate-400">Créé le {{ s.created_at|date:"d/m/Y" }}</div>
+                </td>
+                <td class="py-3 px-4 text-slate-600 dark:text-slate-300">
+                  {{ s.zone|default:"Toutes zones" }}
+                </td>
+                <td class="py-3 px-4 font-mono text-xs text-blue-600 dark:text-blue-400">
+                  {{ s.user.username }}
+                </td>
+                <td class="py-3 px-4 text-slate-600 dark:text-slate-300">
+                  {{ s.telephone|default:"Non renseigné" }}
+                </td>
+                <td class="py-3 px-4">
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                    {{ s.commission_percent }}%
+                  </span>
+                </td>
+                <td class="py-3 px-4">
+                  <span class="font-bold text-slate-900 dark:text-white">{{ s.agents_count }}</span> agent(s)
+                </td>
+                <td class="py-3 px-4">
+                  {% if s.is_active %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                      Actif
+                    </span>
+                  {% else %}
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20">
+                      Suspendu
+                    </span>
+                  {% endif %}
+                </td>
+                <td class="py-3 px-4 text-right">
+                  <div class="flex items-center justify-end gap-2">
+                    <button type="button" onclick="openEditModal('{{ s.id }}', '{{ s.nom }}', '{{ s.zone|default:'' }}', '{{ s.telephone|default:'' }}', '{{ s.commission_percent }}', {{ s.is_active|yesno:'true,false' }})" class="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 text-slate-700 dark:text-slate-200 text-xs font-medium transition">
+                      Modifier
+                    </button>
+                    <form method="post" action="{% url 'admin_portal:sous_directeur_delete' s.id %}" onsubmit="return confirm('Confirmer la suppression de {{ s.nom }} ? Les agents associés ne seront pas supprimés mais détachés.');">
+                      {% csrf_token %}
+                      <button type="submit" class="px-3 py-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-medium border border-rose-500/20 transition">
+                        Supprimer
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr>
+                <td colspan="8" class="py-8 text-center text-slate-500 dark:text-slate-400 text-sm">
+                  Aucun sous-directeur enregistré pour le moment. Utilisez le formulaire ci-dessus pour en créer un.
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal Modification Sous-Directeur -->
+  <div id="editModal" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="w-full max-w-lg rounded-3xl border border-slate-200/80 dark:border-white/10 bg-white dark:bg-slate-900 p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between">
+        <h3 class="text-base font-bold text-slate-900 dark:text-white">Modifier le Sous-Directeur</h3>
+        <button type="button" onclick="closeEditModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <form id="editForm" method="post" action="" class="space-y-4">
+        {% csrf_token %}
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nom complet</label>
+          <input type="text" id="editNom" name="nom" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Zone / Ville</label>
+            <input type="text" id="editZone" name="zone" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Téléphone</label>
+            <input type="text" id="editTel" name="telephone" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Commission Sous-Directeur (%)</label>
+          <input type="number" step="0.01" min="0" max="100" id="editCommission" name="commission_percent" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm" />
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Nouveau mot de passe (laisser vide pour ne pas changer)</label>
+          <input type="password" name="password" placeholder="Laisser vide pour conserver l'actuel" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-white/10 text-slate-900 dark:text-white text-sm" />
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="editIsActive" name="is_active" class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300" />
+          <label for="editIsActive" class="text-xs font-semibold text-slate-700 dark:text-slate-300">Compte actif (autorisé à se connecter)</label>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-4">
+          <button type="button" onclick="closeEditModal()" class="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-sm font-medium">
+            Annuler
+          </button>
+          <button type="submit" class="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium shadow-md shadow-blue-500/20">
+            Enregistrer
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function submitAssign(e) {
+      e.preventDefault();
+      var sdSelect = document.getElementById('assignSdSelect');
+      var form = document.getElementById('assignAgentForm');
+      if (!sdSelect.value) {
+        alert('Veuillez sélectionner un sous-directeur.');
+        return;
+      }
+      form.action = '/portal/sous-directeurs/' + sdSelect.value + '/assigner/';
+      form.submit();
+    }
+
+    function openEditModal(id, nom, zone, tel, comm, isActive) {
+      var modal = document.getElementById('editModal');
+      var form = document.getElementById('editForm');
+      form.action = '/portal/sous-directeurs/' + id + '/modifier/';
+      document.getElementById('editNom').value = nom;
+      document.getElementById('editZone').value = zone;
+      document.getElementById('editTel').value = tel;
+      document.getElementById('editCommission').value = comm;
+      document.getElementById('editIsActive').checked = isActive;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeEditModal() {
+      var modal = document.getElementById('editModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  </script>
+{% endblock %}

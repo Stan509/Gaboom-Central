@@ -313,10 +313,19 @@ class ResultCalculationService:
         if ticket.statut != TicketStatus.VALIDE:
             return
 
-        resultat = Resultat.objects.filter(
-            tirage=ticket.tirage,
-            session_key=ticket.tirage_session_key,
-        ).first()
+        resultat = None
+        if ticket.tirage_session_key:
+            resultat = Resultat.objects.filter(
+                tirage=ticket.tirage,
+                session_key=ticket.tirage_session_key,
+            ).first()
+
+        if not resultat and ticket.tirage:
+            ticket_date = ticket.created_at.date() if ticket.created_at else timezone.localdate()
+            resultat = Resultat.objects.filter(
+                tirage=ticket.tirage,
+                date=ticket_date,
+            ).order_by("-id").first()
 
         if not resultat:
             # Pas encore de résultat saisi pour cette session, rien à faire

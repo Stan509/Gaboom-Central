@@ -26,7 +26,7 @@ class _TicketLine:
 
 class TicketValidationService:
     @staticmethod
-    def validate_ticket(*, admin, agent, ticket_lines, draw_ids) -> dict:
+    def validate_ticket(*, admin, agent, ticket_lines, draw_ids, allow_closed_draw: bool = False) -> dict:
         errors: list[str] = []
         free_marriages: list[dict] = []
 
@@ -37,7 +37,11 @@ class TicketValidationService:
         if agent is None or getattr(agent, "borlette_id", None) != admin_borlette.id:
             return {"is_valid": False, "errors": ["Tirage fermé ou invalide"], "free_marriages": []}
 
-        draws = TicketValidationService._validate_draws(admin_borlette_id=admin_borlette.id, draw_ids=draw_ids)
+        draws = TicketValidationService._validate_draws(
+            admin_borlette_id=admin_borlette.id,
+            draw_ids=draw_ids,
+            allow_closed=allow_closed_draw,
+        )
         if draws is None:
             errors.append("Tirage fermé ou invalide")
 
@@ -238,7 +242,7 @@ class TicketValidationService:
         return AdminPaymentSettings(borlette=borlette)
 
     @staticmethod
-    def _validate_draws(*, admin_borlette_id: int, draw_ids) -> list[Tirage] | None:
+    def _validate_draws(*, admin_borlette_id: int, draw_ids, allow_closed: bool = False) -> list[Tirage] | None:
         ids = list(draw_ids or [])
         if not ids:
             return None
@@ -250,7 +254,7 @@ class TicketValidationService:
         for t in tirages:
             if t.statut != TirageStatus.ACTIF:
                 return None
-            if t.etat_ouverture != "OUVERT":
+            if not allow_closed and t.etat_ouverture != "OUVERT":
                 return None
 
         return tirages

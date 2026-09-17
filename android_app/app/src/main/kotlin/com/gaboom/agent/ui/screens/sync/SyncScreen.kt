@@ -340,7 +340,7 @@ fun PendingTicketCard(
             ) {
                 // Ticket local ID
                 Text(
-                    text = ticket.localTicketNo ?: "HL-${ticket.id.take(8).uppercase()}",
+                    text = ticket.localTicketNo ?: "POS-${ticket.id.take(8).uppercase()}",
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp

@@ -156,7 +156,7 @@ class TicketManagementViewModel @Inject constructor(
 
         return TicketListItem(
             id = entity.id,
-            numero = entity.localTicketNo ?: "HL-${entity.id.take(8).uppercase()}",
+            numero = entity.localTicketNo ?: "POS-${entity.id.take(8).uppercase()}",
             groupId = entity.batchId,
             tirageId = entity.tirageId,
             tirageNom = tirageNom,

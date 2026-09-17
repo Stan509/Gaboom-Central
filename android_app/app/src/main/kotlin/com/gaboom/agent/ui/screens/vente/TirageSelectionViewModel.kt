@@ -31,7 +31,7 @@ class TirageSelectionViewModel @Inject constructor(
             val response = drawRepository.getTiragesActifs()
             if (response.isSuccessful && response.body()?.success == true) {
                 val allTirages = response.body()?.tirages ?: emptyList()
-                val tirages = allTirages.filter { it.etat == "OUVERT" }
+                val tirages = allTirages.filter { it.etat == "OUVERT" && !com.gaboom.agent.data.clock.SecuredClock.isDrawClosed(it.heureFermeture) }
                 _uiState.value = _uiState.value.copy(
                     tirages = tirages,
                     isLoading = false

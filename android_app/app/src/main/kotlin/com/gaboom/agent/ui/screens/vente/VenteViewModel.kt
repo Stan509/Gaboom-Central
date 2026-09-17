@@ -894,6 +894,20 @@ class VenteViewModel @Inject constructor(
                 return@launch
             }
 
+            // Verify none of the selected draws are closed
+            val closedTirage = _uiState.value.availableTirages
+                .filter { selectedIds.contains(it.id) }
+                .find { it.etat != "OUVERT" || com.gaboom.agent.data.clock.SecuredClock.isDrawClosed(it.heureFermeture) }
+
+            if (closedTirage != null) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Le tirage ${closedTirage.nom} est fermé.",
+                    creationProgress = null
+                )
+                return@launch
+            }
+
             try {
                 val sessionKey = _uiState.value.availableTirages
                     .find { it.id == selectedIds.first() }
@@ -990,8 +1004,9 @@ class VenteViewModel @Inject constructor(
             String.format("%-8s %-9s %6.0f", jeuDisplay, line.valeur, line.mise)
         }
         val now = java.util.Date(com.gaboom.agent.data.clock.SecuredClock.now())
-        val dateFormat = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
-        val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+        val haitiTz = java.util.TimeZone.getTimeZone("America/Port-au-Prince")
+        val dateFormat = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).apply { timeZone = haitiTz }
+        val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).apply { timeZone = haitiTz }
 
         val deviceCreds = kotlinx.coroutines.runBlocking { agentConfigDataStore.getDeviceCredentials() }
         val deviceId = deviceCreds?.deviceId ?: "unknown_device"
@@ -1034,8 +1049,9 @@ class VenteViewModel @Inject constructor(
             String.format("%-8s %-9s %6.0f", jeuDisplay, line.valeur, line.mise)
         }
         val now = java.util.Date(com.gaboom.agent.data.clock.SecuredClock.now())
-        val dateFormat = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault())
-        val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+        val haitiTz = java.util.TimeZone.getTimeZone("America/Port-au-Prince")
+        val dateFormat = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).apply { timeZone = haitiTz }
+        val timeFormat = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).apply { timeZone = haitiTz }
 
         val deviceCreds = kotlinx.coroutines.runBlocking { agentConfigDataStore.getDeviceCredentials() }
         val deviceId = deviceCreds?.deviceId ?: "unknown_device"
@@ -1088,7 +1104,7 @@ class VenteViewModel @Inject constructor(
                         gratuit = entry.gratuit
                     )
                 }
-                val ticketNo = pendingTicket.serverTicketNo ?: pendingTicket.localTicketNo ?: "HL-${pendingTicket.id.take(8).uppercase()}"
+                val ticketNo = pendingTicket.serverTicketNo ?: pendingTicket.localTicketNo ?: "POS-${pendingTicket.id.take(8).uppercase()}"
                 val ticketIdToUse = pendingTicket.serverTicketId ?: pendingTicket.id
                 val createdInfo = CreatedTicketInfo(
                     ticketId = ticketIdToUse,
@@ -1166,7 +1182,7 @@ class VenteViewModel @Inject constructor(
                 offlineLimitEnforcer.recordServerContact()
                 val allTirages = response.body()?.tirages ?: emptyList()
                 agentConfigDataStore.saveCachedTirages(allTirages)
-                val openTirages = allTirages.filter { it.etat == "OUVERT" }
+                val openTirages = allTirages.filter { it.etat == "OUVERT" && !com.gaboom.agent.data.clock.SecuredClock.isDrawClosed(it.heureFermeture) }
                 val defaultSelected = setOf(defaultTirageId)
                 _uiState.value = _uiState.value.copy(
                     availableTirages = openTirages,
@@ -1217,7 +1233,7 @@ class VenteViewModel @Inject constructor(
                     offlineLimitEnforcer.recordServerContact()
                     val allTirages = response.body()?.tirages ?: emptyList()
                     agentConfigDataStore.saveCachedTirages(allTirages)
-                    val openTirages = allTirages.filter { it.etat == "OUVERT" }
+                    val openTirages = allTirages.filter { it.etat == "OUVERT" && !com.gaboom.agent.data.clock.SecuredClock.isDrawClosed(it.heureFermeture) }
                     _uiState.value = _uiState.value.copy(
                         availableTirages = openTirages,
                         isLoadingTirages = false
@@ -1225,7 +1241,7 @@ class VenteViewModel @Inject constructor(
                 } else {
                     val cached = agentConfigDataStore.getCachedTirages()
                     _uiState.value = _uiState.value.copy(
-                        availableTirages = cached.filter { it.etat == "OUVERT" },
+                        availableTirages = cached.filter { it.etat == "OUVERT" && !com.gaboom.agent.data.clock.SecuredClock.isDrawClosed(it.heureFermeture) },
                         isLoadingTirages = false,
                         error = if (cached.isEmpty()) "Erreur chargement tirages" else null
                     )
@@ -1233,7 +1249,7 @@ class VenteViewModel @Inject constructor(
             } catch (e: Exception) {
                 val cached = agentConfigDataStore.getCachedTirages()
                 _uiState.value = _uiState.value.copy(
-                    availableTirages = cached.filter { it.etat == "OUVERT" },
+                    availableTirages = cached.filter { it.etat == "OUVERT" && !com.gaboom.agent.data.clock.SecuredClock.isDrawClosed(it.heureFermeture) },
                     isLoadingTirages = false,
                     error = if (cached.isEmpty()) "Erreur: ${e.message}" else null
                 )
@@ -1325,6 +1341,19 @@ class VenteViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = offlineLimitEnforcer.getBlockMessage()
+                )
+                return@launch
+            }
+
+            // Verify none of the selected draws are closed
+            val closedTirage = _uiState.value.availableTirages
+                .filter { selectedIds.contains(it.id) }
+                .find { it.etat != "OUVERT" || com.gaboom.agent.data.clock.SecuredClock.isDrawClosed(it.heureFermeture) }
+
+            if (closedTirage != null) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Le tirage ${closedTirage.nom} est fermé."
                 )
                 return@launch
             }

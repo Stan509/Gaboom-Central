@@ -476,6 +476,81 @@ class CreateMultiEndpointTests(TestCase):
         self.assertTrue(data["success"])
         self.assertEqual(data["tickets"][0]["status"], "ANNULE")
 
+    @patch('agent_portal.api_views._get_agent_from_request')
+    def test_create_multi_offline_sync_after_draw_closed_with_results(self, mock_get_agent):
+        """Offline ticket created before closure syncs successfully even if draw is closed and results already published"""
+        from accounts.models import Resultat
+        mock_get_agent.return_value = self.agent
+
+        # Draw was open earlier, closing time is now passed
+        tz = timezone.get_default_timezone()
+        now_dt = timezone.now().astimezone(tz)
+        
+        # Set draw heure_fermeture to 5 minutes ago and heure_tirage to 2 minutes ago
+        closing_time = (now_dt - timezone.timedelta(minutes=5)).time()
+        tirage_time = (now_dt - timezone.timedelta(minutes=2)).time()
+        self.tirage1.heure_fermeture = closing_time
+        self.tirage1.heure_tirage = tirage_time
+        self.tirage1.save(update_fields=["heure_fermeture", "heure_tirage"])
+        self.assertEqual(self.tirage1.etat_ouverture, "FERME")
+
+        # Ticket was created offline 10 minutes ago (BEFORE closing time)
+        ticket_created_at_dt = now_dt - timezone.timedelta(minutes=10)
+        ticket_created_at_ms = int(ticket_created_at_dt.timestamp() * 1000)
+        now_ms = int(now_dt.timestamp() * 1000)
+
+        # Result is already published for this session
+        from accounts.models import AdminPaymentSettings
+        AdminPaymentSettings.objects.create(
+            borlette=self.borlette,
+            boule_1er_lot_coeff=Decimal("50.0"),
+        )
+        Resultat.objects.create(
+            tirage=self.tirage1,
+            session_key=self.session_key,
+            date=now_dt.date(),
+            lot1="34",
+            lot2="12",
+            lot3="56",
+            chiffre_loto3="7",
+        )
+
+        payload = {
+            "tirage_ids": [self.tirage1.id],
+            "entries": [
+                {"game": "boule", "number": "34", "stake": 50.0}
+            ],
+            "session_key": self.session_key,
+            "created_at": ticket_created_at_ms,
+            "client_time": now_ms,
+        }
+
+        signature, _ = self._calculate_hmac(
+            payload, self.session_key, self.device.device_secret
+        )
+
+        response = self.client.post(
+            "/api/agent/ticket/create-multi/",
+            data=json.dumps(payload),
+            content_type="application/json",
+            **self._get_auth_headers(self.agent),
+            HTTP_X_DEVICE_ID=self.device.device_id,
+            HTTP_X_PAYLOAD_SIGN=signature,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertEqual(len(data["tickets"]), 1)
+        self.assertEqual(data["tickets"][0]["status"], "VALIDE")
+
+        # Verify the ticket is in database, marked as winner with calculated gain
+        ticket = Ticket.objects.get(id=data["tickets"][0]["ticket_uuid"])
+        self.assertEqual(ticket.statut, TicketStatus.VALIDE)
+        self.assertTrue(ticket.is_winner)
+        self.assertGreater(ticket.total_gain_du, Decimal("0"))
+
+
 
 class BlueprintEndpointTests(TestCase):
     """Tests for GET /api/agent/ticket/<uuid>/blueprint/"""
@@ -775,3 +850,4 @@ class CancellationAndDriftTests(TestCase):
         tickets = response.json()["tickets"]
         self.assertEqual(len(tickets), 1)
         self.assertEqual(tickets[0]["status"], "ANNULE")
+

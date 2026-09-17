@@ -196,7 +196,7 @@ fun VenteScreen(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         itemsIndexed(uiState.availableTirages) { _, tirage ->
-                            val isOpen = tirage.etat == "OUVERT"
+                            val isOpen = tirage.etat == "OUVERT" && !com.gaboom.agent.data.clock.SecuredClock.isDrawClosed(tirage.heureFermeture)
                             val isSelected = uiState.selectedTirageIds.contains(tirage.id)
                             Surface(
                                 modifier = Modifier

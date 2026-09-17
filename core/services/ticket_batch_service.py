@@ -328,6 +328,7 @@ class TicketBatchService:
                         agent=agent,
                         ticket_lines=lines,
                         draw_ids=[draw.id],
+                        allow_closed_draw=tolerated_closure,
                     )
 
                     if not validation.get("is_valid"):
@@ -529,7 +530,21 @@ class TicketBatchService:
                             )
 
                     ticket.total_mise = total_mise
-                    ticket.save(update_fields=["total_mise"])
+                    ticket_created_at = body.get("created_at")
+                    if ticket_created_at:
+                        try:
+                            import datetime
+                            ticket_dt = datetime.datetime.fromtimestamp(
+                                int(ticket_created_at) / 1000.0,
+                                tz=datetime.timezone.utc
+                            )
+                            ticket.created_at = ticket_dt
+                            ticket.save(update_fields=["total_mise", "created_at"])
+                        except Exception as e:
+                            logger.error(f"[BATCH] Error setting ticket created_at: {e}")
+                            ticket.save(update_fields=["total_mise"])
+                    else:
+                        ticket.save(update_fields=["total_mise"])
 
                     if ticket.statut == TicketStatus.VALIDE:
                         _create_commission_entry(ticket)

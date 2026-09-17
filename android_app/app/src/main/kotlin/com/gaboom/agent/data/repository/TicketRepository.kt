@@ -123,12 +123,22 @@ class TicketRepository @Inject constructor(
         val cachedTirages = agentConfigDataStore.getCachedTirages()
         val deviceCreds = agentConfigDataStore.getDeviceCredentials()
 
+        // Strict enforcement: ensure none of the selected draws are closed according to SecuredClock
+        tirageIds.forEach { tirageId ->
+            val tirageInfo = cachedTirages.find { it.id == tirageId }
+            if (tirageInfo != null) {
+                if (tirageInfo.etat != "OUVERT" || com.gaboom.agent.data.clock.SecuredClock.isDrawClosed(tirageInfo.heureFermeture)) {
+                    throw IllegalStateException("Le tirage ${tirageInfo.nom} est fermé.")
+                }
+            }
+        }
+
         val ticketsList = tirageIds.map { tirageId ->
             val localId = UUID.randomUUID().toString()
 
             // Allocate official number from server-allocated device range
             val seqNumber = agentConfigDataStore.getAndIncrementTicketNumber()
-            val localTicketNo = "POS-${deviceCreds?.deviceId?.takeLast(8)?.uppercase() ?: "OFF"}-$seqNumber"
+            val localTicketNo = "POS-${deviceCreds?.deviceId?.takeLast(8)?.uppercase() ?: "DEV"}-$seqNumber"
 
             // Try to find the correct session key for this specific draw
             val correctSessionKey = cachedTirages.find { it.id == tirageId }?.sessionKey ?: sessionKey ?: ""

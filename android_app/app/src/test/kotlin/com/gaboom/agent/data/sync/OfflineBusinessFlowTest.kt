@@ -14,7 +14,7 @@ class OfflineBusinessFlowTest {
     fun testAirplaneModeAndOfflinePrinting() {
         // 1. Verify ticket is created in offline mode (simulate Airplane Mode)
         val localId = UUID.randomUUID().toString()
-        val localTicketNo = "HL-${localId.take(8).uppercase()}"
+        val localTicketNo = "POS-${localId.take(8).uppercase()}"
         val lines = listOf(
             TicketLine(jeu = "boule", valeur = "44", mise = 10.0, option = 0)
         )
@@ -102,7 +102,7 @@ class OfflineBusinessFlowTest {
             ticketUuid = localId,
             tirageId = 6,
             sessionKey = "session-xxx",
-            ticketNo = "HL-${localId.take(8).uppercase()}",
+            ticketNo = "POS-${localId.take(8).uppercase()}",
             totalMise = 50.0,
             createdAt = System.currentTimeMillis(),
             rawJson = "{}"

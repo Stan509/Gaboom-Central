@@ -340,7 +340,7 @@ class SyncManager @Inject constructor(
             }
             val tid = ticket.tirageId
             if (tid != null) {
-                val ticketNo = ticket.localTicketNo ?: "HL-${ticket.id.take(8).uppercase()}"
+                val ticketNo = ticket.localTicketNo ?: "POS-${ticket.id.take(8).uppercase()}"
                 // Use per-ticket sessionKey so the server can validate against each draw individually
                 val ticketSessionKey = ticket.sessionKey
                 // Merge if multiple tickets share the same tirageId (combined batches)

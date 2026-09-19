@@ -48,5 +48,4 @@ android_app/*.hprof
 .gradle/
 build/
 *.hprof
-staticfiles/
 

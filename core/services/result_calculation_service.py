@@ -36,8 +36,8 @@ class ResultCalculationService:
         from agent_portal.models import Ticket, TicketLine, TicketStatus
 
         # Vérifications
-        if tirage.etat_ouverture == "OUVERT" and resultat.session_key == tirage.session_key:
-            raise ValueError("Impossible de calculer les gains: tirage encore ouvert")
+        if tirage.etat_ouverture == "OUVERT":
+            raise ValueError(f"Impossible de calculer les gains: le tirage '{tirage.nom}' est encore ouvert")
 
         # Récupérer les coefficients de paiement
         try:
@@ -55,9 +55,9 @@ class ResultCalculationService:
         payout_mariage_gratuit = Decimal(str(getattr(settings, "mariage_gratuit_montant_fixe", 0) or 0))
 
         # Extraire les numéros gagnants du résultat
-        lot1 = resultat.lot1
-        lot2 = resultat.lot2
-        lot3 = resultat.lot3
+        lot1 = (resultat.lot1 or "").strip()
+        lot2 = (resultat.lot2 or "").strip()
+        lot3 = (resultat.lot3 or "").strip()
         lots_set = {lot1, lot2, lot3}
         
         loto3_val = resultat.loto3
@@ -67,20 +67,20 @@ class ResultCalculationService:
         import datetime
         from django.db.models import Q
 
-        # Sélectionner tous les tickets de cette session ou correspondant à ce tirage et à la date du tirage
-        tickets_filter = Q(tirage_session_key=resultat.session_key)
-        if tirage.session_key:
-            tickets_filter |= Q(tirage_session_key=tirage.session_key)
-        if resultat.date:
-            tz = timezone.get_current_timezone()
-            dt_start = timezone.make_aware(datetime.datetime.combine(resultat.date, datetime.time.min), tz)
-            dt_end = timezone.make_aware(datetime.datetime.combine(resultat.date, datetime.time.max), tz)
-            tickets_filter |= Q(created_at__range=(dt_start, dt_end)) | Q(created_at__date=resultat.date)
+        # Sélectionner UNIQUEMENT les tickets appartenant à ce résultat :
+        # 1. Tickets portant la même session_key que le résultat
+        # 2. Tickets de ce tirage créés le même jour local que le résultat (tickets hors ligne synchronisés)
+        tz = timezone.get_current_timezone()
+        dt_start = timezone.make_aware(datetime.datetime.combine(resultat.date, datetime.time.min), tz)
+        dt_end = timezone.make_aware(datetime.datetime.combine(resultat.date, datetime.time.max), tz)
 
         tickets = Ticket.objects.filter(
             tirage=tirage,
             statut=TicketStatus.VALIDE,
-        ).filter(tickets_filter).distinct().prefetch_related("lignes")
+        ).filter(
+            Q(tirage_session_key=resultat.session_key) |
+            (Q(created_at__range=(dt_start, dt_end)) & ~Q(created_at__isnull=True))
+        ).distinct().prefetch_related("lignes")
 
         stats = {
             "tickets_count": 0,
@@ -242,11 +242,19 @@ class ResultCalculationService:
         coeff_3eme: Decimal,
     ) -> tuple[Decimal, bool, str]:
         """Boule gagne si numéro == lot1/lot2/lot3."""
-        if valeur == lot1:
+        v = (valeur or "").strip().zfill(2)
+        l1 = (lot1 or "").strip().zfill(2) if lot1 else ""
+        l2 = (lot2 or "").strip().zfill(2) if lot2 else ""
+        l3 = (lot3 or "").strip().zfill(2) if lot3 else ""
+
+        if not v or not (l1 or l2 or l3):
+            return Decimal("0"), False, ""
+
+        if l1 and v == l1:
             return mise * coeff_1er, True, "1er lot"
-        if valeur == lot2:
+        if l2 and v == l2:
             return mise * coeff_2eme, True, "2ème lot"
-        if valeur == lot3:
+        if l3 and v == l3:
             return mise * coeff_3eme, True, "3ème lot"
         return Decimal("0"), False, ""
 
@@ -261,13 +269,17 @@ class ResultCalculationService:
         payout_mariage_gratuit: Decimal,
     ) -> tuple[Decimal, bool, str]:
         """Mariage gagne si les deux numéros sont dans les lots (ordre indifférent)."""
-        # Format: "44x30" ou "44-30"
-        parts = valeur.replace("-", "x").split("x")
+        parts = (valeur or "").replace("-", "x").split("x")
         if len(parts) != 2:
             return Decimal("0"), False, ""
         
-        n1, n2 = parts[0].strip(), parts[1].strip()
-        if n1 in lots_set and n2 in lots_set:
+        n1 = parts[0].strip().zfill(2)
+        n2 = parts[1].strip().zfill(2)
+        valid_lots = {str(lot).strip().zfill(2) for lot in lots_set if lot and str(lot).strip()}
+        if len(valid_lots) < 2 or not n1 or not n2:
+            return Decimal("0"), False, ""
+
+        if n1 in valid_lots and n2 in valid_lots:
             gain = mise * coeff_mariage if not is_gratuit else payout_mariage_gratuit
             return gain, True, "Mariage gagnant"
         return Decimal("0"), False, ""
@@ -281,7 +293,9 @@ class ResultCalculationService:
         coeff_loto3: Decimal,
     ) -> tuple[Decimal, bool, str]:
         """Loto3 gagne si valeur == loto3 du résultat."""
-        if valeur == loto3_val:
+        v = (valeur or "").strip().zfill(3)
+        target = (loto3_val or "").strip().zfill(3) if loto3_val else ""
+        if v and target and v == target:
             return mise * coeff_loto3, True, "Loto3"
         return Decimal("0"), False, ""
 
@@ -294,10 +308,10 @@ class ResultCalculationService:
         coeff_loto4: Decimal,
     ) -> tuple[Decimal, bool, str]:
         """Loto4 gagne si valeur == une des 3 options loto4."""
-        if valeur in loto4_vals:
-            # Déterminer quelle option
-            opt = "Loto4"
-            return mise * coeff_loto4, True, opt
+        v = (valeur or "").strip().zfill(4)
+        clean_opts = {str(opt).strip().zfill(4) for opt in loto4_vals if opt and len(str(opt).strip()) >= 2}
+        if v and v in clean_opts:
+            return mise * coeff_loto4, True, "Loto4"
         return Decimal("0"), False, ""
 
     @staticmethod
@@ -308,8 +322,10 @@ class ResultCalculationService:
         loto5_vals: set,
         coeff_loto5: Decimal,
     ) -> tuple[Decimal, bool, str]:
-        """Loto5 gagne si valeur == une des 3 options loto5."""
-        if valeur in loto5_vals:
+        """Loto5 gagne si valeur == une des options loto5."""
+        v = (valeur or "").strip().zfill(5)
+        clean_opts = {str(opt).strip().zfill(5) for opt in loto5_vals if opt and len(str(opt).strip()) >= 2}
+        if v and v in clean_opts:
             return mise * coeff_loto5, True, "Loto5"
         return Decimal("0"), False, ""
 
@@ -317,7 +333,8 @@ class ResultCalculationService:
     @transaction.atomic
     def calculate_single_ticket_gains(ticket: Ticket) -> None:
         """
-        Calcule les gains pour un ticket spécifique si un résultat existe pour sa session.
+        Calcule les gains pour un ticket spécifique UNIQUEMENT si son tirage est FERMÉ
+        et qu'un résultat officiel validé existe pour sa session ou sa date.
         """
         from accounts.models import Resultat, AdminPaymentSettings
         from agent_portal.models import TicketStatus
@@ -325,34 +342,41 @@ class ResultCalculationService:
         if ticket.statut != TicketStatus.VALIDE or not ticket.tirage:
             return
 
+        # RÈGLE MÉTIER ABSOLUE 1 : Si le tirage est OUVERT, aucun gain ne peut exister !
+        if ticket.tirage.etat_ouverture == "OUVERT":
+            if ticket.is_winner or (ticket.total_gain_du and ticket.total_gain_du > Decimal("0")) or ticket.computed_at is not None:
+                ticket.is_winner = False
+                ticket.total_gain_du = Decimal("0.00")
+                ticket.computed_at = None
+                ticket.save(update_fields=["is_winner", "total_gain_du", "computed_at"])
+                ticket.lignes.update(gain_du=Decimal("0.00"), is_winner=False, win_context="")
+            return
+
+        # RÈGLE MÉTIER 2 : Le tirage est FERMÉ. On cherche le résultat correspondant.
         resultat = None
+        # Priorité 1 : Match par session_key exacte du ticket
         if ticket.tirage_session_key:
             resultat = Resultat.objects.filter(
                 tirage=ticket.tirage,
                 session_key=ticket.tirage_session_key,
-            ).first()
+            ).exclude(statut="rejected").first()
 
-        if not resultat and ticket.tirage.session_key:
-            resultat = Resultat.objects.filter(
-                tirage=ticket.tirage,
-                session_key=ticket.tirage.session_key,
-            ).first()
-
-        if not resultat:
-            ticket_date = timezone.localtime(ticket.created_at).date() if ticket.created_at else timezone.localdate()
+        # Priorité 2 : Pour tickets hors ligne synchronisés, match UNIQUEMENT sur la même date locale
+        if not resultat and ticket.created_at:
+            ticket_date = timezone.localtime(ticket.created_at).date()
             resultat = Resultat.objects.filter(
                 tirage=ticket.tirage,
                 date=ticket_date,
-            ).order_by("-id").first()
+            ).exclude(statut="rejected").order_by("-id").first()
 
-        if not resultat and ticket.created_at:
-            resultat = Resultat.objects.filter(
-                tirage=ticket.tirage,
-                date=ticket.created_at.date(),
-            ).order_by("-id").first()
-
-        if not resultat:
-            # Pas encore de résultat saisi pour cette session ou ce tirage, rien à faire
+        if not resultat or not (resultat.lot1 and resultat.lot2 and resultat.lot3):
+            # Pas encore de résultat complet officiel saisi : le ticket reste non calculé (0 gain)
+            if ticket.is_winner or (ticket.total_gain_du and ticket.total_gain_du > Decimal("0")) or ticket.computed_at is not None:
+                ticket.is_winner = False
+                ticket.total_gain_du = Decimal("0.00")
+                ticket.computed_at = None
+                ticket.save(update_fields=["is_winner", "total_gain_du", "computed_at"])
+                ticket.lignes.update(gain_du=Decimal("0.00"), is_winner=False, win_context="")
             return
 
         # Récupérer les coefficients de paiement
@@ -371,9 +395,9 @@ class ResultCalculationService:
         payout_mariage_gratuit = Decimal(str(getattr(settings, "mariage_gratuit_montant_fixe", 0) or 0))
 
         # Extraire les numéros gagnants du résultat
-        lot1 = resultat.lot1
-        lot2 = resultat.lot2
-        lot3 = resultat.lot3
+        lot1 = (resultat.lot1 or "").strip()
+        lot2 = (resultat.lot2 or "").strip()
+        lot3 = (resultat.lot3 or "").strip()
         lots_set = {lot1, lot2, lot3}
         
         loto3_val = resultat.loto3

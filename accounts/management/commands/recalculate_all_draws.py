@@ -31,7 +31,27 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         self.stdout.write(self.style.NOTICE("=== DÉBUT DU RECALCUL DES TIRAGES ET GAINS ==="))
 
-        qs = Resultat.objects.all().select_related("tirage", "tirage__borlette").order_by("date", "id")
+        # Étape 1 : Réinitialiser immédiatement les tickets des tirages actuellement OUVERTS
+        open_tirage_ids = [t.id for t in Tirage.objects.all() if t.etat_ouverture == "OUVERT"]
+        open_tickets = Ticket.objects.filter(tirage_id__in=open_tirage_ids)
+        open_tickets_count = open_tickets.count()
+        if open_tickets_count > 0:
+            self.stdout.write(f"Réinitialisation de {open_tickets_count} tickets de tirages actuellement OUVERTS...")
+            from agent_portal.models import TicketLine
+            open_tickets.update(is_winner=False, total_gain_du=Decimal("0.00"), computed_at=None)
+            TicketLine.objects.filter(ticket__in=open_tickets).update(
+                gain_du=Decimal("0.00"), is_winner=False, win_context=""
+            )
+            self.stdout.write(self.style.SUCCESS("Tickets de tirages ouverts réinitialisés à 0 gain."))
+
+        # Étape 2 : Traiter uniquement les résultats des tirages FERMÉS avec des lots complets
+        qs = (
+            Resultat.objects.exclude(tirage_id__in=open_tirage_ids)
+            .exclude(statut="rejected")
+            .exclude(lot1="", lot2="", lot3="")
+            .select_related("tirage", "tirage__borlette")
+            .order_by("date", "id")
+        )
 
         if options.get("tirage_id"):
             qs = qs.filter(tirage_id=options["tirage_id"])
@@ -39,7 +59,7 @@ class Command(BaseCommand):
             qs = qs.filter(date=options["date"])
 
         total_results = qs.count()
-        self.stdout.write(f"Nombre de résultats à traiter : {total_results}")
+        self.stdout.write(f"Nombre de résultats officiels fermés à traiter : {total_results}")
 
         total_tickets_recalculated = 0
         total_winners_found = 0
@@ -47,6 +67,8 @@ class Command(BaseCommand):
 
         for r in qs:
             tirage = r.tirage
+            if not (r.lot1 and r.lot2 and r.lot3):
+                continue
             self.stdout.write(
                 f"\nTraitement résultat ID={r.id}: {tirage.nom} ({r.date}) - Lots: {r.lot1}-{r.lot2}-{r.lot3}"
             )

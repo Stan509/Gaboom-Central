@@ -9,6 +9,49 @@
   <!-- Leaflet Map library stylesheet and script from CDN -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    .custom-pin {
+      background: transparent !important;
+      border: none !important;
+    }
+    .pulse-marker {
+      position: relative;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pulse-marker .core-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
+      position: relative;
+      z-index: 2;
+      transition: transform 0.2s ease-in-out;
+    }
+    .pulse-marker:hover .core-dot {
+      transform: scale(1.3);
+    }
+    .pulse-marker.online::after {
+      content: '';
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background-color: rgba(16, 185, 129, 0.5);
+      animation: radar-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+      z-index: 1;
+    }
+    @keyframes radar-ping {
+      75%, 100% {
+        transform: scale(2.4);
+        opacity: 0;
+      }
+    }
+  </style>
 {% endblock %}
 
 {% block page_header %}{% endblock %}
@@ -633,7 +676,7 @@
       }
     } else {
       if (latLngList.length === 1) {
-        dashboardMap.panTo(latLngList[0]);
+        dashboardMap.setView(latLngList[0], 15);
       } else if (latLngList.length > 1) {
         dashboardMap.fitBounds(L.latLngBounds(latLngList), { padding: [40, 40] });
       }
@@ -685,23 +728,13 @@
         </div>
       `;
 
-      const markerHtmlStyles = `
-        background-color: ${statusColor};
-        width: 14px;
-        height: 14px;
-        display: block;
-        left: -3px;
-        top: -3px;
-        position: relative;
-        border-radius: 50%;
-        border: 2px solid #ffffff;
-        box-shadow: 0 0 8px rgba(0,0,0,0.4);
-      `;
+      const isOnlineClass = a.is_online ? 'online' : '';
       const icon = L.divIcon({
         className: "custom-pin",
-        iconAnchor: [5, 5],
-        popupAnchor: [0, -10],
-        html: `<span style="${markerHtmlStyles}" />`
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+        popupAnchor: [0, -12],
+        html: `<div class="pulse-marker ${isOnlineClass}"><span class="core-dot" style="background-color: ${statusColor};"></span></div>`
       });
 
       if (mapMarkers[a.id]) {

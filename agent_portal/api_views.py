@@ -1624,6 +1624,17 @@ def api_ticket_list_agent(request: HttpRequest) -> JsonResponse:
                 tirage=tirage, 
                 session_key=ticket.tirage_session_key
             ).exists()
+        if not has_results and tirage and tirage.session_key:
+            has_results = Resultat.objects.filter(
+                tirage=tirage,
+                session_key=tirage.session_key
+            ).exists()
+        if not has_results and tirage:
+            ticket_date = timezone.localtime(ticket.created_at).date() if ticket.created_at else timezone.localdate()
+            has_results = Resultat.objects.filter(
+                tirage=tirage,
+                date=ticket_date
+            ).exists()
         
         if ticket.statut == TicketStatus.ANNULE:
             computed_status = "cancelled"
@@ -1790,6 +1801,17 @@ def api_ticket_group_search(request: HttpRequest, group_id: str) -> JsonResponse
             has_results = Resultat.objects.filter(
                 tirage=ticket.tirage, 
                 session_key=ticket.tirage_session_key
+            ).exists()
+        if not has_results and ticket.tirage and ticket.tirage.session_key:
+            has_results = Resultat.objects.filter(
+                tirage=ticket.tirage,
+                session_key=ticket.tirage.session_key
+            ).exists()
+        if not has_results and ticket.tirage:
+            ticket_date = timezone.localtime(ticket.created_at).date() if ticket.created_at else timezone.localdate()
+            has_results = Resultat.objects.filter(
+                tirage=ticket.tirage,
+                date=ticket_date
             ).exists()
         
         # Calculer le statut

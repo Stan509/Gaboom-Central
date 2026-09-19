@@ -63,6 +63,8 @@ def api_tirage_results(request: HttpRequest, tirage_id: int) -> JsonResponse:
 
 def _get_tirage_results(tirage: Tirage) -> JsonResponse:
     """Retourne les résultats actuels du tirage (utilise modèle Resultat existant)."""
+    import datetime
+    from django.db.models import Q
     session_key = tirage.session_key
     
     # Chercher résultats existants pour cette session
@@ -70,13 +72,26 @@ def _get_tirage_results(tirage: Tirage) -> JsonResponse:
         tirage=tirage,
         session_key=session_key
     ).first()
+
+    if not result:
+        result = Resultat.objects.filter(
+            tirage=tirage,
+            date=timezone.localdate(),
+        ).order_by("-id").first()
     
-    # Stats des tickets de cette session
-    tickets = Ticket.objects.filter(
-        tirage=tirage,
-        tirage_session_key=session_key,
-        statut=TicketStatus.VALIDE,
-    )
+    # Stats des tickets de cette session ou date
+    ticket_filter = Q(tirage=tirage, statut=TicketStatus.VALIDE)
+    sess_or_date = Q(tirage_session_key=session_key)
+    if result and result.session_key:
+        sess_or_date |= Q(tirage_session_key=result.session_key)
+    
+    res_date = result.date if result else timezone.localdate()
+    tz = timezone.get_current_timezone()
+    dt_start = timezone.make_aware(datetime.datetime.combine(res_date, datetime.time.min), tz)
+    dt_end = timezone.make_aware(datetime.datetime.combine(res_date, datetime.time.max), tz)
+    sess_or_date |= Q(created_at__range=(dt_start, dt_end)) | Q(created_at__date=res_date)
+
+    tickets = Ticket.objects.filter(ticket_filter).filter(sess_or_date).distinct()
     
     tickets_count = tickets.count()
     winners_count = tickets.filter(is_winner=True).count()
@@ -636,14 +651,28 @@ def api_winners_by_tirage(request: HttpRequest, tirage_id: int) -> JsonResponse:
     if not tirage:
         return JsonResponse({"error": "Tirage non trouvé"}, status=404)
     
+    import datetime
+    from django.db.models import Q
+
     session_key = tirage.session_key
     
-    tickets = Ticket.objects.filter(
-        tirage=tirage,
-        tirage_session_key=session_key,
-        is_winner=True,
-        statut=TicketStatus.VALIDE,
-    ).select_related("agent").order_by("-total_gain_du")[:100]
+    # Chercher résultat
+    result = Resultat.objects.filter(tirage=tirage, session_key=session_key).first()
+    if not result:
+        result = Resultat.objects.filter(tirage=tirage, date=timezone.localdate()).order_by("-id").first()
+
+    ticket_filter = Q(tirage=tirage, is_winner=True, statut=TicketStatus.VALIDE)
+    sess_or_date = Q(tirage_session_key=session_key)
+    if result and result.session_key:
+        sess_or_date |= Q(tirage_session_key=result.session_key)
+    
+    res_date = result.date if result else timezone.localdate()
+    tz = timezone.get_current_timezone()
+    dt_start = timezone.make_aware(datetime.datetime.combine(res_date, datetime.time.min), tz)
+    dt_end = timezone.make_aware(datetime.datetime.combine(res_date, datetime.time.max), tz)
+    sess_or_date |= Q(created_at__range=(dt_start, dt_end)) | Q(created_at__date=res_date)
+
+    tickets = Ticket.objects.filter(ticket_filter).filter(sess_or_date).distinct().select_related("agent").order_by("-total_gain_du")[:100]
     
     data = []
     for t in tickets:

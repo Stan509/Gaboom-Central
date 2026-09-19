@@ -9,6 +9,15 @@
     <script src="{% static 'js/gaboom-hero.js' %}" defer></script>
     <link rel="stylesheet" href="{% static 'css/gaboom.css' %}">
     <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+      .no-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .no-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+    </style>
     {% block extra_head %}{% endblock %}
 </head>
   <body>
@@ -234,139 +243,140 @@
       </footer>
 
       {% if request.user.role == 'sous_directeur' %}
-      <!-- Mobile Bar pour Sous-Directeur -->
-      <nav class="lg:hidden fixed bottom-0 left-0 w-full bg-slate-900/95 dark:bg-black/95 backdrop-blur-2xl border-t border-white/10 flex justify-around items-center py-2 z-40 px-2 overflow-hidden shadow-2xl" role="navigation" aria-label="Menu mobile sous-directeur">
-        <a class="flex flex-col items-center justify-center py-1 px-3 rounded-2xl text-[11px] font-medium transition text-white/80 hover:text-white {% if request.resolver_match.url_name == 'sous_directeur_dashboard' %}text-gaboom-orange font-bold bg-white/10{% endif %}" href="{% url 'admin_portal:sous_directeur_dashboard' %}">
+      <!-- Mobile Bar Horizontale pour Sous-Directeur -->
+      <nav class="lg:hidden fixed bottom-0 left-0 w-full bg-slate-900/95 dark:bg-black/95 backdrop-blur-2xl border-t border-white/10 flex items-center py-2 z-40 px-2 overflow-x-auto gap-2 shadow-2xl no-scrollbar scroll-smooth" role="navigation" aria-label="Menu mobile sous-directeur">
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3.5 rounded-xl text-[11px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'sous_directeur_dashboard' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:sous_directeur_dashboard' %}">
           <i data-lucide="layout-dashboard" class="h-5 w-5 mb-0.5"></i>
           <span>Dashboard</span>
         </a>
-        <a class="flex flex-col items-center justify-center py-1 px-3 rounded-2xl text-[11px] font-medium transition text-white/80 hover:text-white {% if request.resolver_match.url_name == 'sous_directeur_agents' or request.resolver_match.url_name == 'sous_directeur_agent_create' %}text-gaboom-orange font-bold bg-white/10{% endif %}" href="{% url 'admin_portal:sous_directeur_agents' %}">
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3.5 rounded-xl text-[11px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'sous_directeur_agents' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:sous_directeur_agents' %}">
           <i data-lucide="users" class="h-5 w-5 mb-0.5"></i>
           <span>Mes Agents</span>
         </a>
-        <a class="flex flex-col items-center justify-center py-1 px-3 rounded-2xl text-[11px] font-medium transition text-white/80 hover:text-white {% if request.resolver_match.url_name == 'sous_directeur_tirages' %}text-gaboom-orange font-bold bg-white/10{% endif %}" href="{% url 'admin_portal:sous_directeur_tirages' %}">
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3.5 rounded-xl text-[11px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'sous_directeur_agent_create' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:sous_directeur_agent_create' %}">
+          <i data-lucide="user-plus" class="h-5 w-5 mb-0.5"></i>
+          <span>Créer Agent</span>
+        </a>
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3.5 rounded-xl text-[11px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'sous_directeur_tirages' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:sous_directeur_tirages' %}">
           <i data-lucide="target" class="h-5 w-5 mb-0.5"></i>
-          <span>Tirages</span>
+          <span>Tirages Zone</span>
         </a>
       </nav>
       {% elif request.user.is_superuser %}
-      <!-- Mobile Bar pour SuperAdmin -->
-      <nav class="lg:hidden fixed bottom-0 left-0 w-full bg-slate-900/95 dark:bg-black/95 backdrop-blur-2xl border-t border-white/10 grid grid-cols-4 items-center py-2 z-40 px-2 overflow-hidden shadow-2xl" role="navigation" aria-label="Menu mobile superadmin">
-        <a class="flex flex-col items-center justify-center py-1 rounded-xl text-[11px] font-medium transition text-white/80 hover:text-white {% if request.resolver_match.url_name == 'superadmin_dashboard' %}text-gaboom-orange font-bold bg-white/10{% endif %}" href="{% url 'superadmin_dashboard' %}">
+      <!-- Mobile Bar Horizontale pour SuperAdmin -->
+      <nav class="lg:hidden fixed bottom-0 left-0 w-full bg-slate-900/95 dark:bg-black/95 backdrop-blur-2xl border-t border-white/10 flex items-center py-2 z-40 px-2 overflow-x-auto gap-2 shadow-2xl no-scrollbar scroll-smooth" role="navigation" aria-label="Menu mobile superadmin">
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10.5px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'superadmin_dashboard' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'superadmin_dashboard' %}">
           <i data-lucide="layout-dashboard" class="h-5 w-5 mb-0.5"></i>
           <span>Dashboard</span>
         </a>
-        <a class="flex flex-col items-center justify-center py-1 rounded-xl text-[11px] font-medium transition text-white/80 hover:text-white {% if request.resolver_match.url_name == 'superadmin_api_config' %}text-gaboom-orange font-bold bg-white/10{% endif %}" href="{% url 'superadmin_api_config' %}">
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10.5px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'superadmin_tirages' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'superadmin_tirages' %}">
+          <i data-lucide="target" class="h-5 w-5 mb-0.5"></i>
+          <span>Contrôle Tirages</span>
+        </a>
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10.5px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'superadmin_api_config' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'superadmin_api_config' %}">
           <i data-lucide="settings-2" class="h-5 w-5 mb-0.5"></i>
           <span>API Config</span>
         </a>
-        <a class="flex flex-col items-center justify-center py-1 rounded-xl text-[11px] font-medium transition text-white/80 hover:text-white {% if request.resolver_match.url_name == 'superadmin_recovery_requests' %}text-gaboom-orange font-bold bg-white/10{% endif %}" href="{% url 'superadmin_recovery_requests' %}">
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10.5px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'superadmin_payment_config' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'superadmin_payment_config' %}">
+          <i data-lucide="credit-card" class="h-5 w-5 mb-0.5"></i>
+          <span>Paiements</span>
+        </a>
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10.5px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'superadmin_smtp_config' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'superadmin_smtp_config' %}">
+          <i data-lucide="mail" class="h-5 w-5 mb-0.5"></i>
+          <span>SMTP</span>
+        </a>
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10.5px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'superadmin_email_marketing' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'superadmin_email_marketing' %}">
+          <i data-lucide="send" class="h-5 w-5 mb-0.5"></i>
+          <span>Marketing</span>
+        </a>
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10.5px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'superadmin_recovery_requests' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'superadmin_recovery_requests' %}">
           <i data-lucide="key-round" class="h-5 w-5 mb-0.5"></i>
           <span>Récup</span>
         </a>
-        <a class="flex flex-col items-center justify-center py-1 rounded-xl text-[11px] font-medium transition text-white/80 hover:text-white {% if request.resolver_match.url_name == 'partner_list' %}text-gaboom-orange font-bold bg-white/10{% endif %}" href="{% url 'admin_portal:partner_list' %}">
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10.5px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'partner_list' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:partner_list' %}">
           <i data-lucide="user-cog" class="h-5 w-5 mb-0.5"></i>
           <span>Partenaires</span>
         </a>
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1.5 px-3 rounded-xl text-[10.5px] font-medium transition whitespace-nowrap text-white/80 hover:text-white {% if request.resolver_match.url_name == 'affiliate_list' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:affiliate_list' %}">
+          <i data-lucide="users" class="h-5 w-5 mb-0.5"></i>
+          <span>Affiliés</span>
+        </a>
       </nav>
       {% else %}
-      <!-- Mobile Bar ergonomique pour Admin Borlette (sans scroll horizontal) -->
-      <nav class="lg:hidden fixed bottom-0 left-0 w-full bg-slate-900/95 dark:bg-black/95 backdrop-blur-2xl border-t border-white/10 grid grid-cols-5 items-center py-1.5 z-40 px-1 overflow-hidden shadow-2xl" role="navigation" aria-label="Menu mobile">
+      <!-- Mobile Bar Horizontale pour Admin Borlette avec défilement de TOUS les boutons -->
+      <nav class="lg:hidden fixed bottom-0 left-0 w-full bg-slate-900/95 dark:bg-black/95 backdrop-blur-2xl border-t border-white/10 flex items-center py-1.5 z-40 px-2 overflow-x-auto gap-1.5 shadow-2xl no-scrollbar scroll-smooth" role="navigation" aria-label="Menu mobile">
         <!-- 1. Dashboard -->
-        <a class="flex flex-col items-center justify-center py-1 rounded-xl text-[10px] font-medium transition text-white/80 hover:text-white {% if request.resolver_match.url_name == 'dashboard' %}text-gaboom-orange font-bold bg-white/10{% endif %}" href="{% url 'admin_portal:dashboard' %}">
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'dashboard' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:dashboard' %}">
           <i data-lucide="layout-dashboard" class="h-5 w-5 mb-0.5"></i>
-          <span class="truncate">Accueil</span>
+          <span>Accueil</span>
         </a>
 
         <!-- 2. Agents -->
-        <a class="flex flex-col items-center justify-center py-1 rounded-xl text-[10px] font-medium transition text-white/80 hover:text-white {% if request.resolver_match.url_name == 'agents' or request.resolver_match.url_name|slice:':6' == 'agent_' %}text-gaboom-orange font-bold bg-white/10{% endif %}" href="{% url 'admin_portal:agents' %}">
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'agents' or request.resolver_match.url_name|slice:':6' == 'agent_' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:agents' %}">
           <i data-lucide="user-plus" class="h-5 w-5 mb-0.5"></i>
-          <span class="truncate">Agents</span>
+          <span>Agents</span>
         </a>
 
         <!-- 3. Tirages -->
-        <a class="flex flex-col items-center justify-center py-1 rounded-xl text-[10px] font-medium transition text-white/80 hover:text-white {% if request.resolver_match.url_name == 'tirages' or request.resolver_match.url_name|slice:':7' == 'tirage_' %}text-gaboom-orange font-bold bg-white/10{% endif %}" href="{% url 'admin_portal:tirages' %}">
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'tirages' or request.resolver_match.url_name|slice:':7' == 'tirage_' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:tirages' %}">
           <i data-lucide="target" class="h-5 w-5 mb-0.5"></i>
-          <span class="truncate">Tirages</span>
+          <span>Tirages</span>
         </a>
 
         <!-- 4. Sous-Directeurs -->
-        <a class="flex flex-col items-center justify-center py-1 rounded-xl text-[10px] font-medium transition text-white/80 hover:text-white {% if request.resolver_match.url_name == 'sous_directeurs_list' or request.resolver_match.url_name|slice:':15' == 'sous_directeur_' %}text-gaboom-orange font-bold bg-white/10{% endif %}" href="{% url 'admin_portal:sous_directeurs_list' %}">
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'sous_directeurs_list' or request.resolver_match.url_name|slice:':15' == 'sous_directeur_' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:sous_directeurs_list' %}">
           <i data-lucide="shield" class="h-5 w-5 mb-0.5"></i>
-          <span class="truncate">Sous-Dir</span>
+          <span>Sous-Dir</span>
         </a>
 
-        <!-- 5. Plus (Tiroir Bottom Sheet) -->
-        <button type="button" onclick="toggleMobileMoreSheet()" class="flex flex-col items-center justify-center py-1 rounded-xl text-[10px] font-medium transition text-white/80 hover:text-white hover:bg-white/10 focus:outline-none">
-          <i data-lucide="more-horizontal" class="h-5 w-5 mb-0.5"></i>
-          <span>Plus...</span>
-        </button>
+        <!-- 5. Rapports -->
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'rapports' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:rapports' %}">
+          <i data-lucide="bar-chart-3" class="h-5 w-5 mb-0.5"></i>
+          <span>Rapports</span>
+        </a>
+
+        <!-- 6. Tickets -->
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'tickets_list' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:tickets_list' %}">
+          <i data-lucide="ticket" class="h-5 w-5 mb-0.5"></i>
+          <span>Tickets</span>
+        </a>
+
+        <!-- 7. Information -->
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'information' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:information' %}">
+          <i data-lucide="info" class="h-5 w-5 mb-0.5"></i>
+          <span>Info</span>
+        </a>
+
+        <!-- 8. Audit -->
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'audit_logs_list' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:audit_logs_list' %}">
+          <i data-lucide="shield-check" class="h-5 w-5 mb-0.5"></i>
+          <span>Audit</span>
+        </a>
+
+        <!-- 9. Team -->
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'team' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:team' %}">
+          <i data-lucide="users" class="h-5 w-5 mb-0.5"></i>
+          <span>Team</span>
+        </a>
+
+        <!-- 10. Dépenses -->
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'depenses_list' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:depenses_list' %}">
+          <i data-lucide="wallet" class="h-5 w-5 mb-0.5"></i>
+          <span>Dépenses</span>
+        </a>
+
+        <!-- 11. Paramètres -->
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'parametres' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:parametres' %}">
+          <i data-lucide="settings" class="h-5 w-5 mb-0.5"></i>
+          <span>Paramètres</span>
+        </a>
+
+        <!-- 12. Abonnement -->
+        <a class="flex-shrink-0 flex flex-col items-center justify-center py-1 px-2.5 rounded-xl text-[10px] font-medium transition whitespace-nowrap min-w-[56px] text-white/80 hover:text-white {% if request.resolver_match.url_name == 'payment' %}text-gaboom-orange font-bold bg-white/10 ring-1 ring-gaboom-orange/30{% endif %}" href="{% url 'admin_portal:payment' %}">
+          <i data-lucide="credit-card" class="h-5 w-5 mb-0.5"></i>
+          <span>Abonnement</span>
+        </a>
       </nav>
-
-      <!-- Bottom Sheet Drawer pour les onglets secondaires -->
-      <div id="mobileMoreSheet" class="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm hidden flex-col justify-end" onclick="if(event.target === this) toggleMobileMoreSheet()">
-        <div class="w-full bg-slate-900 border-t border-white/15 rounded-t-3xl p-5 pb-8 shadow-2xl max-h-[85vh] overflow-y-auto space-y-4">
-          <div class="flex items-center justify-between pb-3 border-b border-white/10">
-            <div class="flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-gaboom-orange"></span>
-              <h3 class="text-sm font-bold text-white uppercase tracking-wider">Fonctionnalités avancées</h3>
-            </div>
-            <button type="button" onclick="toggleMobileMoreSheet()" class="p-1.5 rounded-xl bg-white/10 text-slate-300 hover:text-white">
-              <i data-lucide="x" class="h-4 w-4"></i>
-            </button>
-          </div>
-
-          <div class="grid grid-cols-2 gap-2.5">
-            <!-- Rapports -->
-            <a class="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-semibold transition" href="{% url 'admin_portal:rapports' %}">
-              <div class="p-2 rounded-xl bg-blue-500/20 text-blue-400"><i data-lucide="bar-chart-3" class="h-4 w-4"></i></div>
-              <span>Rapports</span>
-            </a>
-
-            <!-- Tickets -->
-            <a class="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-semibold transition" href="{% url 'admin_portal:tickets_list' %}">
-              <div class="p-2 rounded-xl bg-emerald-500/20 text-emerald-400"><i data-lucide="ticket" class="h-4 w-4"></i></div>
-              <span>Tickets</span>
-            </a>
-
-            <!-- Audit -->
-            <a class="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-semibold transition" href="{% url 'admin_portal:audit_logs_list' %}">
-              <div class="p-2 rounded-xl bg-purple-500/20 text-purple-400"><i data-lucide="shield-check" class="h-4 w-4"></i></div>
-              <span>Audit</span>
-            </a>
-
-            <!-- Information -->
-            <a class="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-semibold transition" href="{% url 'admin_portal:information' %}">
-              <div class="p-2 rounded-xl bg-amber-500/20 text-amber-400"><i data-lucide="info" class="h-4 w-4"></i></div>
-              <span>Information</span>
-            </a>
-
-            <!-- Team -->
-            <a class="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-semibold transition" href="{% url 'admin_portal:team' %}">
-              <div class="p-2 rounded-xl bg-indigo-500/20 text-indigo-400"><i data-lucide="users" class="h-4 w-4"></i></div>
-              <span>Team</span>
-            </a>
-
-            <!-- Dépenses -->
-            <a class="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-semibold transition" href="{% url 'admin_portal:depenses_list' %}">
-              <div class="p-2 rounded-xl bg-rose-500/20 text-rose-400"><i data-lucide="wallet" class="h-4 w-4"></i></div>
-              <span>Dépenses</span>
-            </a>
-
-            <!-- Paramètres -->
-            <a class="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-semibold transition" href="{% url 'admin_portal:parametres' %}">
-              <div class="p-2 rounded-xl bg-slate-500/20 text-slate-300"><i data-lucide="settings" class="h-4 w-4"></i></div>
-              <span>Paramètres</span>
-            </a>
-
-            <!-- Facturation Abonnement -->
-            <a class="flex items-center gap-3 p-3 rounded-2xl bg-white/5 hover:bg-white/10 border border-white/10 text-white text-xs font-semibold transition" href="{% url 'admin_portal:payment' %}">
-              <div class="p-2 rounded-xl bg-yellow-500/20 text-yellow-400"><i data-lucide="credit-card" class="h-4 w-4"></i></div>
-              <span>Abonnement</span>
-            </a>
-          </div>
-        </div>
-      </div>
       {% endif %}
     </div>
     </div>

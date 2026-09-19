@@ -94,11 +94,15 @@ class HeartbeatManager @Inject constructor(
                     val loc = lastLocation ?: getLastKnownLocation()
                     if (loc != null) {
                         locationSyncManager.queueLocation(loc.latitude, loc.longitude)
+                    }
+                    val req = if (loc != null) {
+                        HeartbeatRequest(latitude = loc.latitude, longitude = loc.longitude)
                     } else {
-                        val response = dynamicRetrofitProvider.getApiService().heartbeat(HeartbeatRequest(null, null))
-                        if (response.isSuccessful) {
-                            offlineLimitEnforcer.recordServerContact()
-                        }
+                        HeartbeatRequest(null, null)
+                    }
+                    val response = dynamicRetrofitProvider.getApiService().heartbeat(req)
+                    if (response.isSuccessful) {
+                        offlineLimitEnforcer.recordServerContact()
                     }
                 } catch (e: Exception) {
                     // Silently ignore heartbeat errors

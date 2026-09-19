@@ -36,11 +36,8 @@ class ResultCalculationService:
         from agent_portal.models import Ticket, TicketLine, TicketStatus
 
         # Vérifications
-        if tirage.etat_ouverture == "OUVERT":
+        if tirage.etat_ouverture == "OUVERT" and resultat.session_key == tirage.session_key:
             raise ValueError("Impossible de calculer les gains: tirage encore ouvert")
-        
-        if resultat.session_key != tirage.session_key:
-            raise ValueError("Session key du résultat ne correspond pas au tirage")
 
         # Récupérer les coefficients de paiement
         try:
@@ -67,12 +64,23 @@ class ResultCalculationService:
         loto4_vals = {resultat.loto4_opt1, resultat.loto4_opt2, resultat.loto4_opt3}
         loto5_vals = {resultat.loto5_opt1, resultat.loto5_opt2, resultat.loto5_opt3}
 
-        # Sélectionner tous les tickets de cette session
+        import datetime
+        from django.db.models import Q
+
+        # Sélectionner tous les tickets de cette session ou correspondant à ce tirage et à la date du tirage
+        tickets_filter = Q(tirage_session_key=resultat.session_key)
+        if tirage.session_key:
+            tickets_filter |= Q(tirage_session_key=tirage.session_key)
+        if resultat.date:
+            tz = timezone.get_current_timezone()
+            dt_start = timezone.make_aware(datetime.datetime.combine(resultat.date, datetime.time.min), tz)
+            dt_end = timezone.make_aware(datetime.datetime.combine(resultat.date, datetime.time.max), tz)
+            tickets_filter |= Q(created_at__range=(dt_start, dt_end)) | Q(created_at__date=resultat.date)
+
         tickets = Ticket.objects.filter(
             tirage=tirage,
-            tirage_session_key=tirage.session_key,
             statut=TicketStatus.VALIDE,
-        ).prefetch_related("lignes")
+        ).filter(tickets_filter).distinct().prefetch_related("lignes")
 
         stats = {
             "tickets_count": 0,
@@ -121,7 +129,11 @@ class ResultCalculationService:
             ticket.total_gain_du = ticket_gain_du
             ticket.is_winner = ticket_is_winner
             ticket.computed_at = now
-            ticket.save(update_fields=["total_gain_du", "is_winner", "computed_at"])
+            update_fields = ["total_gain_du", "is_winner", "computed_at"]
+            if resultat.session_key and ticket.tirage_session_key != resultat.session_key:
+                ticket.tirage_session_key = resultat.session_key
+                update_fields.append("tirage_session_key")
+            ticket.save(update_fields=update_fields)
 
             if ticket_is_winner:
                 stats["winners_count"] += 1
@@ -310,7 +322,7 @@ class ResultCalculationService:
         from accounts.models import Resultat, AdminPaymentSettings
         from agent_portal.models import TicketStatus
 
-        if ticket.statut != TicketStatus.VALIDE:
+        if ticket.statut != TicketStatus.VALIDE or not ticket.tirage:
             return
 
         resultat = None
@@ -320,15 +332,27 @@ class ResultCalculationService:
                 session_key=ticket.tirage_session_key,
             ).first()
 
-        if not resultat and ticket.tirage:
-            ticket_date = ticket.created_at.date() if ticket.created_at else timezone.localdate()
+        if not resultat and ticket.tirage.session_key:
+            resultat = Resultat.objects.filter(
+                tirage=ticket.tirage,
+                session_key=ticket.tirage.session_key,
+            ).first()
+
+        if not resultat:
+            ticket_date = timezone.localtime(ticket.created_at).date() if ticket.created_at else timezone.localdate()
             resultat = Resultat.objects.filter(
                 tirage=ticket.tirage,
                 date=ticket_date,
             ).order_by("-id").first()
 
+        if not resultat and ticket.created_at:
+            resultat = Resultat.objects.filter(
+                tirage=ticket.tirage,
+                date=ticket.created_at.date(),
+            ).order_by("-id").first()
+
         if not resultat:
-            # Pas encore de résultat saisi pour cette session, rien à faire
+            # Pas encore de résultat saisi pour cette session ou ce tirage, rien à faire
             return
 
         # Récupérer les coefficients de paiement
@@ -393,4 +417,8 @@ class ResultCalculationService:
         ticket.total_gain_du = ticket_gain_du
         ticket.is_winner = ticket_is_winner
         ticket.computed_at = timezone.now()
-        ticket.save(update_fields=["total_gain_du", "is_winner", "computed_at"])
+        update_fields = ["total_gain_du", "is_winner", "computed_at"]
+        if resultat.session_key and ticket.tirage_session_key != resultat.session_key:
+            ticket.tirage_session_key = resultat.session_key
+            update_fields.append("tirage_session_key")
+        ticket.save(update_fields=update_fields)

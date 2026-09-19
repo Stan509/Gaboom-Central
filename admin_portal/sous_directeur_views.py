@@ -92,7 +92,7 @@ def sous_directeur_create(request: HttpRequest):
             messages.error(request, "Le nom d'utilisateur, le mot de passe et le nom complet sont requis.")
             return redirect("admin_portal:sous_directeurs_list")
 
-        if User.objects.filter(username=username).exists():
+        if User.objects.filter(username__iexact=username).exists():
             messages.error(request, f"Le nom d'utilisateur '{username}' existe déjà.")
             return redirect("admin_portal:sous_directeurs_list")
 
@@ -110,6 +110,8 @@ def sous_directeur_create(request: HttpRequest):
                 password=password,
                 role=UserRole.SOUS_DIRECTEUR,
             )
+            user.is_active = True
+            user.save(update_fields=["is_active"])
             SousDirecteur.objects.create(
                 user=user,
                 borlette=borlette,
@@ -152,9 +154,17 @@ def sous_directeur_edit(request: HttpRequest, sd_id: int):
                 pass
 
         password = (request.POST.get("password") or "").strip()
+        user_updates = []
         if password:
             sd.user.set_password(password)
-            sd.user.save(update_fields=["password"])
+            user_updates.append("password")
+
+        if sd.user.is_active != sd.is_active:
+            sd.user.is_active = sd.is_active
+            user_updates.append("is_active")
+
+        if user_updates:
+            sd.user.save(update_fields=user_updates)
 
         sd.save()
         messages.success(request, f"Sous-directeur '{sd.nom}' mis à jour.")

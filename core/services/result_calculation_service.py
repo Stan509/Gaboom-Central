@@ -35,9 +35,9 @@ class ResultCalculationService:
         from accounts.models import AdminPaymentSettings
         from agent_portal.models import Ticket, TicketLine, TicketStatus
 
-        # Vérifications
-        if tirage.etat_ouverture == "OUVERT":
-            raise ValueError(f"Impossible de calculer les gains: le tirage '{tirage.nom}' est encore ouvert")
+        # Vérifications des lots
+        if not (resultat.lot1 and resultat.lot2 and resultat.lot3):
+            raise ValueError(f"Impossible de calculer les gains: les 3 lots ne sont pas tous définis pour le résultat {resultat.id}")
 
         # Récupérer les coefficients de paiement
         try:
@@ -75,8 +75,7 @@ class ResultCalculationService:
 
         tickets = Ticket.objects.filter(
             tirage=tirage,
-            statut=TicketStatus.VALIDE,
-        ).filter(
+        ).exclude(statut=TicketStatus.ANNULE).filter(
             Q(tirage_session_key=resultat.session_key) |
             (Q(created_at__range=(dt_start, dt_end)) & ~Q(created_at__isnull=True))
         ).distinct().prefetch_related("lignes")
@@ -387,26 +386,15 @@ class ResultCalculationService:
     @transaction.atomic
     def calculate_single_ticket_gains(ticket: Ticket) -> None:
         """
-        Calcule les gains pour un ticket spécifique UNIQUEMENT si son tirage est FERMÉ
-        et qu'un résultat officiel validé existe pour sa session ou sa date.
+        Calcule les gains pour un ticket spécifique si un résultat officiel validé existe
+        pour sa session ou sa date. Si aucun résultat officiel complet n'existe, les gains restent à 0.
         """
         from accounts.models import Resultat, AdminPaymentSettings
         from agent_portal.models import TicketStatus
 
-        if ticket.statut != TicketStatus.VALIDE or not ticket.tirage:
+        if not ticket.tirage or ticket.statut == TicketStatus.ANNULE:
             return
 
-        # RÈGLE MÉTIER ABSOLUE 1 : Si le tirage est OUVERT, aucun gain ne peut exister !
-        if ticket.tirage.etat_ouverture == "OUVERT":
-            if ticket.is_winner or (ticket.total_gain_du and ticket.total_gain_du > Decimal("0")) or ticket.computed_at is not None:
-                ticket.is_winner = False
-                ticket.total_gain_du = Decimal("0.00")
-                ticket.computed_at = None
-                ticket.save(update_fields=["is_winner", "total_gain_du", "computed_at"])
-                ticket.lignes.update(gain_du=Decimal("0.00"), is_winner=False, win_context="")
-            return
-
-        # RÈGLE MÉTIER 2 : Le tirage est FERMÉ. On cherche le résultat correspondant.
         resultat = None
         # Priorité 1 : Match par session_key exacte du ticket
         if ticket.tirage_session_key:
@@ -415,12 +403,19 @@ class ResultCalculationService:
                 session_key=ticket.tirage_session_key,
             ).exclude(statut="rejected").first()
 
-        # Priorité 2 : Pour tickets hors ligne synchronisés, match UNIQUEMENT sur la même date locale
+        # Priorité 2 : Pour tickets de ce tirage créés à la date locale du résultat
         if not resultat and ticket.created_at:
             ticket_date = timezone.localtime(ticket.created_at).date()
             resultat = Resultat.objects.filter(
                 tirage=ticket.tirage,
                 date=ticket_date,
+            ).exclude(statut="rejected").order_by("-id").first()
+
+        # Priorité 3 : Date locale d'aujourd'hui
+        if not resultat:
+            resultat = Resultat.objects.filter(
+                tirage=ticket.tirage,
+                date=timezone.localdate(),
             ).exclude(statut="rejected").order_by("-id").first()
 
         if not resultat or not (resultat.lot1 and resultat.lot2 and resultat.lot3):

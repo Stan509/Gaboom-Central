@@ -1611,30 +1611,34 @@ def api_ticket_list_agent(request: HttpRequest) -> JsonResponse:
     now = timezone.now()
     tickets_data = []
     
+    from core.services.result_calculation_service import ResultCalculationService
+
     for ticket in qs:
+        # Recalculer / synchroniser les gains du ticket s'il y a des résultats
+        ResultCalculationService.calculate_single_ticket_gains(ticket)
+
         # Compute effective status
         tirage = ticket.tirage
         tirage_open = tirage.etat_ouverture == "OUVERT" if tirage else False
         
-        # IMPORTANT: Vérifier si le résultat existe pour la SESSION du ticket
-        # Un ticket ne peut être gagné/perdu que si le résultat de SA session existe
+        # Vérifier si le résultat existe pour ce ticket
         has_results = False
         if tirage and ticket.tirage_session_key:
             has_results = Resultat.objects.filter(
                 tirage=tirage, 
                 session_key=ticket.tirage_session_key
-            ).exists()
-        if not has_results and tirage and tirage.session_key:
-            has_results = Resultat.objects.filter(
-                tirage=tirage,
-                session_key=tirage.session_key
-            ).exists()
+            ).exclude(statut="rejected").exists()
         if not has_results and tirage:
             ticket_date = timezone.localtime(ticket.created_at).date() if ticket.created_at else timezone.localdate()
             has_results = Resultat.objects.filter(
                 tirage=tirage,
                 date=ticket_date
-            ).exists()
+            ).exclude(statut="rejected").exists()
+        if not has_results and tirage:
+            has_results = Resultat.objects.filter(
+                tirage=tirage,
+                date=timezone.localdate()
+            ).exclude(statut="rejected").exists()
         
         if ticket.statut == TicketStatus.ANNULE:
             computed_status = "cancelled"
@@ -1722,6 +1726,11 @@ def api_ticket_search_agent(request: HttpRequest) -> JsonResponse:
     if not ticket:
         return _json_error("Ticket non trouvé", 404)
 
+    # Recalculer / synchroniser les gains du ticket en temps réel
+    from core.services.result_calculation_service import ResultCalculationService
+    ResultCalculationService.calculate_single_ticket_gains(ticket)
+    ticket.refresh_from_db()
+
     # Vérifier si suppression possible (< 60 secondes et pas payé)
     now = timezone.now()
     can_delete = (
@@ -1794,25 +1803,30 @@ def api_ticket_group_search(request: HttpRequest, group_id: str) -> JsonResponse
     now = timezone.now()
     tickets_data = []
     
+    from core.services.result_calculation_service import ResultCalculationService
+
     for ticket in tickets:
-        # Vérifier si le résultat existe pour la session du ticket
+        # Recalculer les gains du ticket en temps réel
+        ResultCalculationService.calculate_single_ticket_gains(ticket)
+
+        # Vérifier si le résultat existe pour ce ticket
         has_results = False
         if ticket.tirage and ticket.tirage_session_key:
             has_results = Resultat.objects.filter(
                 tirage=ticket.tirage, 
                 session_key=ticket.tirage_session_key
-            ).exists()
-        if not has_results and ticket.tirage and ticket.tirage.session_key:
-            has_results = Resultat.objects.filter(
-                tirage=ticket.tirage,
-                session_key=ticket.tirage.session_key
-            ).exists()
+            ).exclude(statut="rejected").exists()
         if not has_results and ticket.tirage:
             ticket_date = timezone.localtime(ticket.created_at).date() if ticket.created_at else timezone.localdate()
             has_results = Resultat.objects.filter(
                 tirage=ticket.tirage,
                 date=ticket_date
-            ).exists()
+            ).exclude(statut="rejected").exists()
+        if not has_results and ticket.tirage:
+            has_results = Resultat.objects.filter(
+                tirage=ticket.tirage,
+                date=timezone.localdate()
+            ).exclude(statut="rejected").exists()
         
         # Calculer le statut
         if ticket.statut == TicketStatus.ANNULE:

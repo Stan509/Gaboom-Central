@@ -58,11 +58,10 @@ class ResultCalculationService:
         lot1 = (resultat.lot1 or "").strip()
         lot2 = (resultat.lot2 or "").strip()
         lot3 = (resultat.lot3 or "").strip()
-        lots_set = {lot1, lot2, lot3}
         
         loto3_val = resultat.loto3
-        loto4_vals = {resultat.loto4_opt1, resultat.loto4_opt2, resultat.loto4_opt3}
-        loto5_vals = {resultat.loto5_opt1, resultat.loto5_opt2, resultat.loto5_opt3}
+        loto4_vals = [resultat.loto4_opt1, resultat.loto4_opt2, resultat.loto4_opt3]
+        loto5_vals = [resultat.loto5_opt1, resultat.loto5_opt2, resultat.loto5_opt3]
 
         import datetime
         from django.db.models import Q
@@ -101,7 +100,6 @@ class ResultCalculationService:
                     lot1=lot1,
                     lot2=lot2,
                     lot3=lot3,
-                    lots_set=lots_set,
                     loto3_val=loto3_val,
                     loto4_vals=loto4_vals,
                     loto5_vals=loto5_vals,
@@ -152,10 +150,9 @@ class ResultCalculationService:
         lot1: str,
         lot2: str,
         lot3: str,
-        lots_set: set,
         loto3_val: str,
-        loto4_vals: set,
-        loto5_vals: set,
+        loto4_vals,
+        loto5_vals,
         coeff_1er: Decimal,
         coeff_2eme: Decimal,
         coeff_3eme: Decimal,
@@ -164,6 +161,7 @@ class ResultCalculationService:
         coeff_loto5: Decimal,
         coeff_mariage: Decimal,
         payout_mariage_gratuit: Decimal,
+        **kwargs,
     ) -> tuple[Decimal, bool, str]:
         """
         Calcule le gain pour une ligne de ticket.
@@ -197,7 +195,9 @@ class ResultCalculationService:
             return ResultCalculationService._calc_mariage(
                 valeur=valeur,
                 mise=effective_mise,
-                lots_set=lots_set,
+                lot1=lot1,
+                lot2=lot2,
+                lot3=lot3,
                 coeff_mariage=coeff_mariage,
                 is_gratuit=line.gratuit,
                 payout_mariage_gratuit=payout_mariage_gratuit,
@@ -241,7 +241,10 @@ class ResultCalculationService:
         coeff_2eme: Decimal,
         coeff_3eme: Decimal,
     ) -> tuple[Decimal, bool, str]:
-        """Boule gagne si numéro == lot1/lot2/lot3."""
+        """Boule gagne si numéro == lot1/lot2/lot3.
+        Si le numéro sort dans plusieurs lots (ex: 1er et 2ème lot),
+        les gains s'additionnent (1er lot + 2ème lot).
+        """
         v = (valeur or "").strip().zfill(2)
         l1 = (lot1 or "").strip().zfill(2) if lot1 else ""
         l2 = (lot2 or "").strip().zfill(2) if lot2 else ""
@@ -250,12 +253,22 @@ class ResultCalculationService:
         if not v or not (l1 or l2 or l3):
             return Decimal("0"), False, ""
 
+        total_gain = Decimal("0")
+        contexts = []
+
         if l1 and v == l1:
-            return mise * coeff_1er, True, "1er lot"
+            total_gain += mise * coeff_1er
+            contexts.append("1er lot")
         if l2 and v == l2:
-            return mise * coeff_2eme, True, "2ème lot"
+            total_gain += mise * coeff_2eme
+            contexts.append("2ème lot")
         if l3 and v == l3:
-            return mise * coeff_3eme, True, "3ème lot"
+            total_gain += mise * coeff_3eme
+            contexts.append("3ème lot")
+
+        if contexts:
+            return total_gain, True, " + ".join(contexts)
+
         return Decimal("0"), False, ""
 
     @staticmethod
@@ -263,25 +276,52 @@ class ResultCalculationService:
         *,
         valeur: str,
         mise: Decimal,
-        lots_set: set,
+        lot1: str,
+        lot2: str,
+        lot3: str,
         coeff_mariage: Decimal,
         is_gratuit: bool,
         payout_mariage_gratuit: Decimal,
     ) -> tuple[Decimal, bool, str]:
-        """Mariage gagne si les deux numéros sont dans les lots (ordre indifférent)."""
+        """Mariage gagne si les deux numéros forment l'une des 3 paires du tirage:
+        (lot1, lot2), (lot1, lot3), (lot2, lot3).
+        Si une paire est présente plusieurs fois (lots dupliqués), les gains s'additionnent.
+        """
         parts = (valeur or "").replace("-", "x").split("x")
         if len(parts) != 2:
             return Decimal("0"), False, ""
-        
+
         n1 = parts[0].strip().zfill(2)
         n2 = parts[1].strip().zfill(2)
-        valid_lots = {str(lot).strip().zfill(2) for lot in lots_set if lot and str(lot).strip()}
-        if len(valid_lots) < 2 or not n1 or not n2:
+        if not n1 or not n2:
             return Decimal("0"), False, ""
 
-        if n1 in valid_lots and n2 in valid_lots:
-            gain = mise * coeff_mariage if not is_gratuit else payout_mariage_gratuit
-            return gain, True, "Mariage gagnant"
+        l1 = (lot1 or "").strip().zfill(2) if lot1 else ""
+        l2 = (lot2 or "").strip().zfill(2) if lot2 else ""
+        l3 = (lot3 or "").strip().zfill(2) if lot3 else ""
+
+        pairs = []
+        if l1 and l2:
+            pairs.append((l1, l2))
+        if l1 and l3:
+            pairs.append((l1, l3))
+        if l2 and l3:
+            pairs.append((l2, l3))
+
+        if not pairs:
+            return Decimal("0"), False, ""
+
+        matches_count = 0
+        for p1, p2 in pairs:
+            if (n1 == p1 and n2 == p2) or (n1 == p2 and n2 == p1):
+                matches_count += 1
+
+        if matches_count > 0:
+            unit_gain = mise * coeff_mariage if not is_gratuit else payout_mariage_gratuit
+            total_gain = unit_gain * matches_count
+            context = "Mariage gagnant" if matches_count == 1 else f"Mariage gagnant ({matches_count}x)"
+            return total_gain, True, context
+
         return Decimal("0"), False, ""
 
     @staticmethod
@@ -304,14 +344,21 @@ class ResultCalculationService:
         *,
         valeur: str,
         mise: Decimal,
-        loto4_vals: set,
+        loto4_vals,
         coeff_loto4: Decimal,
     ) -> tuple[Decimal, bool, str]:
-        """Loto4 gagne si valeur == une des 3 options loto4."""
+        """Loto4 gagne si valeur == une des options loto4. Si options dupliquées, s'additionnent."""
         v = (valeur or "").strip().zfill(4)
-        clean_opts = {str(opt).strip().zfill(4) for opt in loto4_vals if opt and len(str(opt).strip()) >= 2}
-        if v and v in clean_opts:
-            return mise * coeff_loto4, True, "Loto4"
+        if not v:
+            return Decimal("0"), False, ""
+
+        opts = [str(opt).strip().zfill(4) for opt in loto4_vals if opt and len(str(opt).strip()) >= 2]
+        matches_count = sum(1 for opt in opts if opt == v)
+        if matches_count > 0:
+            total_gain = matches_count * mise * coeff_loto4
+            context = "Loto4" if matches_count == 1 else f"Loto4 ({matches_count}x)"
+            return total_gain, True, context
+
         return Decimal("0"), False, ""
 
     @staticmethod
@@ -319,14 +366,21 @@ class ResultCalculationService:
         *,
         valeur: str,
         mise: Decimal,
-        loto5_vals: set,
+        loto5_vals,
         coeff_loto5: Decimal,
     ) -> tuple[Decimal, bool, str]:
-        """Loto5 gagne si valeur == une des options loto5."""
+        """Loto5 gagne si valeur == une des options loto5. Si options dupliquées, s'additionnent."""
         v = (valeur or "").strip().zfill(5)
-        clean_opts = {str(opt).strip().zfill(5) for opt in loto5_vals if opt and len(str(opt).strip()) >= 2}
-        if v and v in clean_opts:
-            return mise * coeff_loto5, True, "Loto5"
+        if not v:
+            return Decimal("0"), False, ""
+
+        opts = [str(opt).strip().zfill(5) for opt in loto5_vals if opt and len(str(opt).strip()) >= 2]
+        matches_count = sum(1 for opt in opts if opt == v)
+        if matches_count > 0:
+            total_gain = matches_count * mise * coeff_loto5
+            context = "Loto5" if matches_count == 1 else f"Loto5 ({matches_count}x)"
+            return total_gain, True, context
+
         return Decimal("0"), False, ""
 
     @staticmethod
@@ -398,11 +452,9 @@ class ResultCalculationService:
         lot1 = (resultat.lot1 or "").strip()
         lot2 = (resultat.lot2 or "").strip()
         lot3 = (resultat.lot3 or "").strip()
-        lots_set = {lot1, lot2, lot3}
-        
         loto3_val = resultat.loto3
-        loto4_vals = {resultat.loto4_opt1, resultat.loto4_opt2, resultat.loto4_opt3}
-        loto5_vals = {resultat.loto5_opt1, resultat.loto5_opt2, resultat.loto5_opt3}
+        loto4_vals = [resultat.loto4_opt1, resultat.loto4_opt2, resultat.loto4_opt3]
+        loto5_vals = [resultat.loto5_opt1, resultat.loto5_opt2, resultat.loto5_opt3]
 
         ticket_gain_du = Decimal("0")
         ticket_is_winner = False
@@ -413,7 +465,6 @@ class ResultCalculationService:
                 lot1=lot1,
                 lot2=lot2,
                 lot3=lot3,
-                lots_set=lots_set,
                 loto3_val=loto3_val,
                 loto4_vals=loto4_vals,
                 loto5_vals=loto5_vals,
